@@ -49,6 +49,9 @@ public class CodeGenerator extends Visitor<String> {
     private Integer labelCounter;
     private ArrayList<ArrayList<String>> labelsStack;
 
+    private ArrayList<String> currentSlots;
+    private int tempVarNumber;
+
     public CodeGenerator(Graph<String> classHierarchy) {
         this.classHierarchy = classHierarchy;
         this.expressionTypeChecker = new ExpressionTypeChecker(classHierarchy);
@@ -219,7 +222,14 @@ public class CodeGenerator extends Visitor<String> {
     }
 
     private int slotOf(String identifier) {
-        //todo
+        if (identifier.equals("")) {
+            this.tempVarNumber++;
+            return this.currentSlots.size() + this.tempVarNumber;
+        }
+        for (int i = 0; i < this.currentSlots.size(); i++) {
+            if (this.currentSlots.get(i).equals(identifier))
+                return i;
+        }
         return 0;
     }
 
@@ -227,6 +237,8 @@ public class CodeGenerator extends Visitor<String> {
     public String visit(Program program) {
         for (ClassDeclaration sophiaClass : program.getClasses()) {
             createFile(sophiaClass.getClassName().getName());
+            this.currentClass = sophiaClass;
+            this.expressionTypeChecker.setCurrentClass(sophiaClass);
             sophiaClass.accept(this);
         }
         return null;
@@ -234,7 +246,6 @@ public class CodeGenerator extends Visitor<String> {
 
     @Override
     public String visit(ClassDeclaration classDeclaration) {
-        this.currentClass = classDeclaration;
         addCommand(".class public " + classDeclaration.getClassName().getName());
         if (classDeclaration.getParentClassName() == null)
             addCommand(".super java/lang/Object");
