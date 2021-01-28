@@ -110,6 +110,13 @@ public class CodeGenerator extends Visitor<String> {
         } catch (IOException e) {}
     }
 
+    private void addBlankLine() {
+        try {
+            this.currentFile.write("\n");
+            this.currentFile.flush();
+        } catch (IOException ignored) {}
+    }
+
     private String getLabel(){
         String newLabel = "Label" + labelCounter.toString();
         labelCounter += 1;
@@ -174,7 +181,28 @@ public class CodeGenerator extends Visitor<String> {
 
     @Override
     public String visit(Program program) {
-        //todo
+        for (ClassDeclaration sophiaClass : program.getClasses()) {
+            createFile(sophiaClass.getClassName().getName());
+            addCommand(".class public " + sophiaClass.getClassName().getName());
+            if (sophiaClass.getParentClassName() == null)
+                addCommand(".super java/lang/Object");
+            else
+                addCommand(".super " + sophiaClass.getParentClassName().getName());
+            addBlankLine();
+
+            ConstructorDeclaration constructorDeclaration = sophiaClass.getConstructor();
+            constructorDeclaration.accept(this);
+            addBlankLine();
+
+            for (FieldDeclaration fieldDeclaration : sophiaClass.getFields()) {
+                fieldDeclaration.accept(this);
+            }
+            addBlankLine();
+
+            for (MethodDeclaration methodDeclaration : sophiaClass.getMethods()) {
+                methodDeclaration.accept(this);
+            }
+        }
         return null;
     }
 
