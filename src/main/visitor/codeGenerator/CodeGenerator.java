@@ -45,6 +45,7 @@ public class CodeGenerator extends Visitor<String> {
     private FileWriter currentFile;
     private ClassDeclaration currentClass;
     private MethodDeclaration currentMethod;
+    private Integer labelCounter;
 
     public CodeGenerator(Graph<String> classHierarchy) {
         this.classHierarchy = classHierarchy;
@@ -107,6 +108,50 @@ public class CodeGenerator extends Visitor<String> {
                 this.currentFile.write("\t\t" + command + "\n");
             this.currentFile.flush();
         } catch (IOException e) {}
+    }
+
+    private String getLabel(){
+        String newLabel = "Label" + labelCounter.toString();
+        labelCounter += 1;
+        return newLabel;
+    }
+
+    private void branch(Expression exp, String nTrue, String nFalse){
+        if (exp instanceof UnaryExpression) {
+            UnaryExpression unExp = (UnaryExpression) exp;
+            if (unExp.getOperator() == UnaryOperator.not){
+                branch(exp, nFalse, nTrue);
+                return;
+            }
+        }
+        if (exp instanceof BinaryExpression) {
+            BinaryExpression binExp = (BinaryExpression) exp;
+            if (binExp.getBinaryOperator() == BinaryOperator.and) {
+                String nNext = getLabel();
+                branch(binExp.getFirstOperand(), nNext, nFalse);
+                addCommand(nNext + ":");
+                branch(binExp.getSecondOperand(), nTrue, nFalse);
+                return;
+            }
+            else if (binExp.getBinaryOperator() == BinaryOperator.or) {
+                String nNext = getLabel();
+                branch(binExp.getFirstOperand(), nTrue, nNext);
+                addCommand(nNext + ":");
+                branch(binExp.getSecondOperand(), nTrue, nFalse);
+                return;
+            }
+        }
+        if (exp instanceof BoolValue) {
+            BoolValue boolValue = (BoolValue) exp;
+            if (boolValue.getConstant())
+                addCommand("goto " + nTrue);
+            else
+                addCommand("goto " + nFalse);
+            return;
+        }
+        exp.accept(this);
+        addCommand("ifeq " + nFalse);
+        addCommand("goto " + nTrue);
     }
 
     private String makeTypeSignature(Type t) {
