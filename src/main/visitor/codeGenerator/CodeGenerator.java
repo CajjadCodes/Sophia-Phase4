@@ -124,24 +124,6 @@ public class CodeGenerator extends Visitor<String> {
         return newLabel;
     }
 
-    private String getVarSignature(VarDeclaration varDeclaration) {
-        String signature = "";
-        Type varType = varDeclaration.getVarName().accept(expressionTypeChecker);
-        if (varType instanceof IntType)
-            signature += "Ljava/lang/Integer";
-        else if (varType instanceof BoolType)
-            signature += "Ljava/lang/Boolean";
-        else if (varType instanceof StringType)
-            signature += "Ljava/lang/String";
-        else if (varType instanceof ListType)
-            signature += "List";
-        else if (varType instanceof FptrType)
-            signature += "Fptr";
-        else if (varType instanceof ClassType)
-            signature += ((ClassType) varType).getClassName().getName();
-        return signature;
-    }
-
     private void branch(Expression exp, String nTrue, String nFalse){
         if (exp instanceof UnaryExpression) {
             UnaryExpression unExp = (UnaryExpression) exp;
@@ -182,8 +164,20 @@ public class CodeGenerator extends Visitor<String> {
     }
 
     private String makeTypeSignature(Type t) {
-        //todo
-        return null;
+        String signature = "";
+        if (t instanceof IntType)
+            signature += "Ljava/lang/Integer";
+        else if (t instanceof BoolType)
+            signature += "Ljava/lang/Boolean";
+        else if (t instanceof StringType)
+            signature += "Ljava/lang/String";
+        else if (t instanceof ListType)
+            signature += "List";
+        else if (t instanceof FptrType)
+            signature += "Fptr";
+        else if (t instanceof ClassType)
+            signature += ((ClassType) t).getClassName().getName();
+        return signature;
     }
 
     private void addDefaultConstructor() {
@@ -252,7 +246,7 @@ public class CodeGenerator extends Visitor<String> {
     @Override
     public String visit(FieldDeclaration fieldDeclaration) {
         addCommand(".field public " + fieldDeclaration.getVarDeclaration().getVarName().getName() + " "
-                + getVarSignature(fieldDeclaration.getVarDeclaration()));
+                + makeTypeSignature(fieldDeclaration.getVarDeclaration().getType()));
         return null;
     }
 
