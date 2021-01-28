@@ -1,6 +1,7 @@
 package main.visitor.codeGenerator;
 
 import main.ast.nodes.Program;
+import main.ast.nodes.declaration.Declaration;
 import main.ast.nodes.declaration.classDec.ClassDeclaration;
 import main.ast.nodes.declaration.classDec.classMembersDec.ConstructorDeclaration;
 import main.ast.nodes.declaration.classDec.classMembersDec.FieldDeclaration;
@@ -117,10 +118,28 @@ public class CodeGenerator extends Visitor<String> {
         } catch (IOException ignored) {}
     }
 
-    private String getLabel(){
+    private String getNewLabel(){
         String newLabel = "Label" + labelCounter.toString();
         labelCounter += 1;
         return newLabel;
+    }
+
+    private String getVarSignature(VarDeclaration varDeclaration) {
+        String signature = "";
+        Type varType = varDeclaration.getVarName().accept(expressionTypeChecker);
+        if (varType instanceof IntType)
+            signature += "Ljava/lang/Integer";
+        else if (varType instanceof BoolType)
+            signature += "Ljava/lang/Boolean";
+        else if (varType instanceof StringType)
+            signature += "Ljava/lang/String";
+        else if (varType instanceof ListType)
+            signature += "List";
+        else if (varType instanceof FptrType)
+            signature += "Fptr";
+        else if (varType instanceof ClassType)
+            signature += ((ClassType) varType).getClassName().getName();
+        return signature;
     }
 
     private void branch(Expression exp, String nTrue, String nFalse){
@@ -134,14 +153,14 @@ public class CodeGenerator extends Visitor<String> {
         if (exp instanceof BinaryExpression) {
             BinaryExpression binExp = (BinaryExpression) exp;
             if (binExp.getBinaryOperator() == BinaryOperator.and) {
-                String nNext = getLabel();
+                String nNext = getNewLabel();
                 branch(binExp.getFirstOperand(), nNext, nFalse);
                 addCommand(nNext + ":");
                 branch(binExp.getSecondOperand(), nTrue, nFalse);
                 return;
             }
             else if (binExp.getBinaryOperator() == BinaryOperator.or) {
-                String nNext = getLabel();
+                String nNext = getNewLabel();
                 branch(binExp.getFirstOperand(), nTrue, nNext);
                 addCommand(nNext + ":");
                 branch(binExp.getSecondOperand(), nTrue, nFalse);
@@ -183,32 +202,31 @@ public class CodeGenerator extends Visitor<String> {
     public String visit(Program program) {
         for (ClassDeclaration sophiaClass : program.getClasses()) {
             createFile(sophiaClass.getClassName().getName());
-            addCommand(".class public " + sophiaClass.getClassName().getName());
-            if (sophiaClass.getParentClassName() == null)
-                addCommand(".super java/lang/Object");
-            else
-                addCommand(".super " + sophiaClass.getParentClassName().getName());
-            addBlankLine();
-
-            ConstructorDeclaration constructorDeclaration = sophiaClass.getConstructor();
-            constructorDeclaration.accept(this);
-            addBlankLine();
-
-            for (FieldDeclaration fieldDeclaration : sophiaClass.getFields()) {
-                fieldDeclaration.accept(this);
-            }
-            addBlankLine();
-
-            for (MethodDeclaration methodDeclaration : sophiaClass.getMethods()) {
-                methodDeclaration.accept(this);
-            }
+            sophiaClass.accept(this);
         }
         return null;
     }
 
     @Override
     public String visit(ClassDeclaration classDeclaration) {
-        //todo
+        addCommand(".class public " + classDeclaration.getClassName().getName());
+        if (classDeclaration.getParentClassName() == null)
+            addCommand(".super java/lang/Object");
+        else
+            addCommand(".super " + classDeclaration.getParentClassName().getName());
+        addBlankLine();
+
+        classDeclaration.getConstructor().accept(this);
+        addBlankLine();
+
+        for (FieldDeclaration fieldDeclaration : classDeclaration.getFields()) {
+            fieldDeclaration.accept(this);
+        }
+        addBlankLine();
+
+        for (MethodDeclaration methodDeclaration : classDeclaration.getMethods()) {
+            methodDeclaration.accept(this);
+        }
         return null;
     }
 
@@ -232,7 +250,8 @@ public class CodeGenerator extends Visitor<String> {
 
     @Override
     public String visit(FieldDeclaration fieldDeclaration) {
-        //todo
+        addCommand(".field public " + fieldDeclaration.getVarDeclaration().getVarName().getName() + " "
+                + getVarSignature(fieldDeclaration.getVarDeclaration()));
         return null;
     }
 
