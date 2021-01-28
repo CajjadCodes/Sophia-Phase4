@@ -1,7 +1,6 @@
 package main.visitor.codeGenerator;
 
 import main.ast.nodes.Program;
-import main.ast.nodes.declaration.Declaration;
 import main.ast.nodes.declaration.classDec.ClassDeclaration;
 import main.ast.nodes.declaration.classDec.classMembersDec.ConstructorDeclaration;
 import main.ast.nodes.declaration.classDec.classMembersDec.FieldDeclaration;
@@ -23,7 +22,6 @@ import main.ast.nodes.statement.loop.ForeachStmt;
 import main.ast.types.NullType;
 import main.ast.types.Type;
 import main.ast.types.functionPointer.FptrType;
-import main.ast.types.list.ListNameType;
 import main.ast.types.list.ListType;
 import main.ast.types.single.BoolType;
 import main.ast.types.single.ClassType;
@@ -38,6 +36,7 @@ import main.visitor.Visitor;
 import main.visitor.typeChecker.ExpressionTypeChecker;
 
 import java.io.*;
+import java.util.ArrayList;
 
 public class CodeGenerator extends Visitor<String> {
     ExpressionTypeChecker expressionTypeChecker;
@@ -46,11 +45,14 @@ public class CodeGenerator extends Visitor<String> {
     private FileWriter currentFile;
     private ClassDeclaration currentClass;
     private MethodDeclaration currentMethod;
+
     private Integer labelCounter;
+    private ArrayList<ArrayList<String>> labelsStack;
 
     public CodeGenerator(Graph<String> classHierarchy) {
         this.classHierarchy = classHierarchy;
         this.expressionTypeChecker = new ExpressionTypeChecker(classHierarchy);
+        this.labelsStack = new ArrayList<>();
         this.prepareOutputFolder();
     }
 
@@ -116,6 +118,34 @@ public class CodeGenerator extends Visitor<String> {
             this.currentFile.write("\n");
             this.currentFile.flush();
         } catch (IOException ignored) {}
+    }
+
+    private void pushLabels(String nAfter, String nBrk, String nCont) {
+        ArrayList<String> newLabels = new ArrayList<>(3);
+        newLabels.add(nAfter);
+        newLabels.add(nBrk);
+        newLabels.add(nCont);
+        this.labelsStack.add(newLabels);
+    }
+
+    private ArrayList<String> getTopLabels() {
+        return this.labelsStack.get(this.labelsStack.size() - 1);
+    }
+
+    private String getTopAfterLabel() {
+        return this.labelsStack.get(this.labelsStack.size() - 1).get(0);
+    }
+
+    private String getTopBrkLabel() {
+        return this.labelsStack.get(this.labelsStack.size() - 1).get(1);
+    }
+
+    private String getTopContLabel() {
+        return this.labelsStack.get(this.labelsStack.size() - 1).get(2);
+    }
+
+    private void popLabels() {
+        this.labelsStack.remove(this.labelsStack.size() - 1);
     }
 
     private String getNewLabel(){
@@ -204,6 +234,7 @@ public class CodeGenerator extends Visitor<String> {
 
     @Override
     public String visit(ClassDeclaration classDeclaration) {
+        this.currentClass = classDeclaration;
         addCommand(".class public " + classDeclaration.getClassName().getName());
         if (classDeclaration.getParentClassName() == null)
             addCommand(".super java/lang/Object");
