@@ -594,7 +594,17 @@ public class CodeGenerator extends Visitor<String> {
     @Override
     public String visit(MethodCall methodCall) {
         String commands = "";
-        //todo
+        commands += methodCall.getInstance().accept(this);
+        commands += "new java/util/ArrayList\n";
+        commands += "dup\n";
+        commands += "invokespecial java/util/ArrayList/<init>()V\n";
+        for (Expression methodArgs : methodCall.getArgs()) {
+            commands += methodArgs.accept(this);
+            //todo check for int bool casting
+            commands += "invokevirtual java/util/ArrayList/add(Ljava/lang/Object;)Z\n";
+            commands += "pop\n";
+        }
+        commands += "invokevirtual List/invoke(Ljava/util/ArrayList;)Ljava/lang/Object;\n";
         return commands;
     }
 
