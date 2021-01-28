@@ -175,7 +175,8 @@ public class CodeGenerator extends Visitor<String> {
                 addCommand("goto " + nFalse);
             return;
         }
-        exp.accept(this);
+        String expCommand = exp.accept(this);
+        addCommand(expCommand);
         addCommand("ifeq " + nFalse);
         addCommand("goto " + nTrue);
     }
