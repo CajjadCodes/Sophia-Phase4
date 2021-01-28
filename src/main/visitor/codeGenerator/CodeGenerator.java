@@ -22,6 +22,7 @@ import main.ast.nodes.statement.loop.ForeachStmt;
 import main.ast.types.NullType;
 import main.ast.types.Type;
 import main.ast.types.functionPointer.FptrType;
+import main.ast.types.list.ListNameType;
 import main.ast.types.list.ListType;
 import main.ast.types.single.BoolType;
 import main.ast.types.single.ClassType;
@@ -157,6 +158,13 @@ public class CodeGenerator extends Visitor<String> {
         return newLabel;
     }
 
+    private String underlineOrSpace(int slot) {
+        if (0 <= slot && slot <= 3)
+            return "_";
+        else
+            return " ";
+    }
+
     private void branch(Expression exp, String nTrue, String nFalse){
         if (exp instanceof UnaryExpression) {
             UnaryExpression unExp = (UnaryExpression) exp;
@@ -205,16 +213,77 @@ public class CodeGenerator extends Visitor<String> {
         else if (t instanceof StringType)
             signature += "Ljava/lang/String";
         else if (t instanceof ListType)
-            signature += "List";
+            signature += "LList;";
         else if (t instanceof FptrType)
-            signature += "Fptr";
+            signature += "LFptr;";
         else if (t instanceof ClassType)
-            signature += ((ClassType) t).getClassName().getName();
+            signature += "L" + ((ClassType) t).getClassName().getName() + ";";
         return signature;
     }
 
+    private String makeFuncArgsSignature(ArrayList<Type> argsType) {
+        String signature = "";
+        for (Type type : argsType) {
+            signature += makeTypeSignature(type);
+        }
+        return signature;
+    }
+
+    private void initFieldDeclaration(FieldDeclaration fieldDeclaration) {
+        Type fieldType = fieldDeclaration.getVarDeclaration().getType();
+        if (fieldType instanceof IntType) {
+            addCommand("new java/lang/Integer");
+            addCommand("dup");
+            addCommand("ldc 0");
+            addCommand("invokespecial java/lang/Integer/<init>(I)V");
+        }
+        else if (fieldType instanceof BoolType) {
+            addCommand("new java/lang/Boolean");
+            addCommand("dup");
+            addCommand("ldc false");
+            addCommand("invokespecial java/lang/Boolean/<init>(Z)V");
+        }
+        else if (fieldType instanceof StringType) {
+            addCommand("new java/lang/String");
+            addCommand("dup");
+            addCommand("ldc \"\"");
+            addCommand("invokespecial java/lang/String/<init>(Ljava/lang/String;)V"); //maybe wrong
+        }
+        else if (fieldType instanceof ListType) {
+            ArrayList<ListNameType> listNameTypes = ((ListType)fieldType).getElementsTypes();
+            addCommand("new List");
+            addCommand("dup ");
+            for (ListNameType listNameType : listNameTypes) { //todo
+
+            }
+        }
+        else if (fieldType instanceof FptrType) {
+            addCommand("ldc null");
+        }
+        else if (fieldType instanceof ClassType) {
+            addCommand("ldc null");
+        }
+    }
+
     private void addDefaultConstructor() {
-        //todo
+        addCommand(".method public <init>()V");
+
+        addCommand("aload_0");
+        if (this.currentClass.getParentClassName() != null)
+            addCommand("invokespecial " + this.currentClass.getParentClassName().getName() + "/<init>()V");
+        else
+            addCommand("invokespecial java/lang/Object/<init>()V");
+
+        for (FieldDeclaration fieldDeclaration : this.currentClass.getFields()) {
+            addCommand("aload_0");
+            initFieldDeclaration(fieldDeclaration);
+            addCommand("putfield " + this.currentClass.getClassName().getName()
+                    + "/" + fieldDeclaration.getVarDeclaration().getVarName().getName()
+                    + " " + makeTypeSignature(fieldDeclaration.getVarDeclaration().getType()));
+        }
+
+        addCommand("return");
+        addCommand(".end method");
     }
 
     private void addStaticMainMethod() {
@@ -237,8 +306,6 @@ public class CodeGenerator extends Visitor<String> {
     public String visit(Program program) {
         for (ClassDeclaration sophiaClass : program.getClasses()) {
             createFile(sophiaClass.getClassName().getName());
-            this.currentClass = sophiaClass;
-            this.expressionTypeChecker.setCurrentClass(sophiaClass);
             sophiaClass.accept(this);
         }
         return null;
@@ -246,6 +313,9 @@ public class CodeGenerator extends Visitor<String> {
 
     @Override
     public String visit(ClassDeclaration classDeclaration) {
+        this.currentClass = classDeclaration;
+        this.expressionTypeChecker.setCurrentClass(classDeclaration);
+
         addCommand(".class public " + classDeclaration.getClassName().getName());
         if (classDeclaration.getParentClassName() == null)
             addCommand(".super java/lang/Object");
@@ -253,7 +323,9 @@ public class CodeGenerator extends Visitor<String> {
             addCommand(".super " + classDeclaration.getParentClassName().getName());
         addBlankLine();
 
-        classDeclaration.getConstructor().accept(this);
+        addDefaultConstructor();
+        if (classDeclaration.getConstructor() != null)
+            classDeclaration.getConstructor().accept(this);
         addBlankLine();
 
         for (FieldDeclaration fieldDeclaration : classDeclaration.getFields()) {
