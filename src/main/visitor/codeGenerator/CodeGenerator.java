@@ -53,6 +53,8 @@ public class CodeGenerator extends Visitor<String> {
     private ArrayList<String> currentSlots;
     private int tempVarNumber;
 
+    private ArrayList<ClassDeclaration> classList;
+
     public CodeGenerator(Graph<String> classHierarchy) {
         this.classHierarchy = classHierarchy;
         this.expressionTypeChecker = new ExpressionTypeChecker(classHierarchy);
@@ -304,6 +306,7 @@ public class CodeGenerator extends Visitor<String> {
 
     @Override
     public String visit(Program program) {
+        this.classList = program.getClasses();
         for (ClassDeclaration sophiaClass : program.getClasses()) {
             createFile(sophiaClass.getClassName().getName());
             sophiaClass.accept(this);
@@ -598,49 +601,84 @@ public class CodeGenerator extends Visitor<String> {
     @Override
     public String visit(NewClassInstance newClassInstance) {
         String commands = "";
-        //todo
+        commands += "new " + newClassInstance.getClassType().getClassName().getName() + "\n";
+        commands += "dup\n";
+
+        for (Expression arg : newClassInstance.getArgs()) {
+            commands += arg.accept(this);
+            //todo check if its int or bool and should be casted to Integer and Boolean
+        }
+
+        ArrayList<Type> classConstuctorArgTypes = new ArrayList<>();
+        for (ClassDeclaration classDeclaration : this.classList) {
+            if (classDeclaration.getClassName().getName()
+                    .equals(newClassInstance.getClassType().getClassName().getName())) {
+                if (classDeclaration.getConstructor() != null) {
+                    for (VarDeclaration argDec : classDeclaration.getConstructor().getArgs())
+                        classConstuctorArgTypes.add(argDec.getType());
+                }
+                break;
+            }
+        }
+        commands += "invokespecial " + newClassInstance.getClassType().getClassName()
+                + "/<init>(" + makeFuncArgsSignature(classConstuctorArgTypes) + ")V\n";
+
         return commands;
     }
 
     @Override
     public String visit(ThisClass thisClass) {
         String commands = "";
-        //todo
+        commands += "aload_0";
         return commands;
     }
 
     @Override
     public String visit(ListValue listValue) {
         String commands = "";
-        //todo
+        commands += "new List\n";
+        commands += "dup\n";
+
+        commands += "new java/util/ArrayList\n";
+        commands += "dup\n";
+        for (Expression expr : listValue.getElements()) {
+            commands += expr.accept(this);
+            //todo check for primitive casting (bool and int)
+        }
+        commands += "invokespecial java/util/ArrayList/<init>()V\n";
+
+        commands += "invokespecial List/<init>(Ljava/util/ArrayList;)V\n";
         return commands;
     }
 
     @Override
     public String visit(NullValue nullValue) {
         String commands = "";
-        //todo
+        commands += "ldc null\n";
         return commands;
     }
 
     @Override
     public String visit(IntValue intValue) {
         String commands = "";
-        //todo
+        commands += "ldc " + intValue.getConstant() + "\n";
         return commands;
     }
 
     @Override
     public String visit(BoolValue boolValue) {
         String commands = "";
-        //todo
+        if (boolValue.getConstant())
+            commands += "ldc 1\n";
+        else
+            commands += "ldc 0\n";
         return commands;
     }
 
     @Override
     public String visit(StringValue stringValue) {
         String commands = "";
-        //todo
+        commands += "ldc \"" + stringValue.getConstant() + "\"\n";
         return commands;
     }
 
