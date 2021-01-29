@@ -494,6 +494,28 @@ public class CodeGenerator extends Visitor<String> {
 
     @Override
     public String visit(ForStmt forStmt) {
+        String nAfter = getTopAfterLabel();
+
+        String nInit = getNewLabel();
+        String nCond = getNewLabel();
+        String nBody = getNewLabel();
+
+        addCommand(nInit + ":");
+        if (forStmt.getInitialize() != null) {
+            forStmt.getInitialize().accept(this);
+        }
+
+        addCommand(nCond + ":");
+        if (forStmt.getCondition() != null) {
+            branch(forStmt.getCondition(), nBody, nAfter);
+        }
+
+        addCommand(nBody + ":");
+        if (forStmt.getBody() != null) {
+            pushLabels(nCond, nAfter, nCond);
+            forStmt.getBody().accept(this);
+            popLabels();
+        }
 
         return null;
     }
