@@ -53,8 +53,6 @@ public class CodeGenerator extends Visitor<String> {
     private ArrayList<String> currentSlots;
     private int tempVarNumber;
 
-    private ArrayList<ClassDeclaration> classList;
-
     public CodeGenerator(Graph<String> classHierarchy) {
         this.classHierarchy = classHierarchy;
         this.expressionTypeChecker = new ExpressionTypeChecker(classHierarchy);
@@ -306,7 +304,6 @@ public class CodeGenerator extends Visitor<String> {
 
     @Override
     public String visit(Program program) {
-        this.classList = program.getClasses();
         for (ClassDeclaration sophiaClass : program.getClasses()) {
             createFile(sophiaClass.getClassName().getName());
             sophiaClass.accept(this);
@@ -564,15 +561,28 @@ public class CodeGenerator extends Visitor<String> {
                 SymbolTable classSymbolTable = ((ClassSymbolTableItem) SymbolTable.root.getItem(ClassSymbolTableItem.START_KEY + className, true)).getClassSymbolTable();
                 try {
                     classSymbolTable.getItem(FieldSymbolTableItem.START_KEY + memberName, true);
-                    //todo it is a field
+                    commands += objectOrListMemberAccess.getInstance().accept(this);
+                    commands += "getfield " + className + "/" + memberName + " " + makeTypeSignature(memberType) + "\n";
                 } catch (ItemNotFoundException memberIsMethod) {
-                    //todo it is a method (new instance of Fptr)
+                    commands += "new Fptr\n";
+                    commands += "dup\n";
+                    commands += objectOrListMemberAccess.getInstance().accept(this);
+                    commands += "ldc " + memberName + "\n";
+                    commands += "invokespecial Fptr/<init>(Ljava/lang/Object;Ljava/lang/String;)V\n";
                 }
             } catch (ItemNotFoundException classNotFound) {
             }
         }
         else if(instanceType instanceof ListType) {
-            //todo
+            ListType listType = (ListType) instanceType;
+            int index = 0;
+            for (index = 0; index < listType.getElementsTypes().size(); index++) {
+                if (listType.getElementsTypes().get(index).getName().getName().equals(memberName))
+                    break;
+            }
+            commands += objectOrListMemberAccess.getInstance().accept(this);
+            commands += "ldc " + index + "\n";
+            commands += "invokevirtual List/getElement(I)Ljava/lang/Object;\n";
         }
         return commands;
     }
@@ -580,14 +590,19 @@ public class CodeGenerator extends Visitor<String> {
     @Override
     public String visit(Identifier identifier) {
         String commands = "";
-        //todo
+        int slot = slotOf(identifier.getName());
+        commands += "aload" + underlineOrSpace(slot) + slot + "\n";
+        //todo cast to primitive int and bool
         return commands;
     }
 
     @Override
     public String visit(ListAccessByIndex listAccessByIndex) {
         String commands = "";
-        //todo
+        commands += listAccessByIndex.getInstance().accept(this);
+        commands += listAccessByIndex.getIndex().accept(this);
+        //todo cast to primitive
+        commands += "invokevirtual List/getElement(I)Ljava/lang/Object;\n";
         return commands;
     }
 
@@ -618,21 +633,17 @@ public class CodeGenerator extends Visitor<String> {
             commands += arg.accept(this);
             //todo check if its int or bool and should be casted to Integer and Boolean
         }
-
-        ArrayList<Type> classConstuctorArgTypes = new ArrayList<>();
-        for (ClassDeclaration classDeclaration : this.classList) {
-            if (classDeclaration.getClassName().getName()
-                    .equals(newClassInstance.getClassType().getClassName().getName())) {
-                if (classDeclaration.getConstructor() != null) {
-                    for (VarDeclaration argDec : classDeclaration.getConstructor().getArgs())
-                        classConstuctorArgTypes.add(argDec.getType());
-                }
-                break;
+        try {
+            ClassDeclaration classDeclaration = ((ClassSymbolTableItem) SymbolTable.root.getItem(ClassSymbolTableItem.START_KEY
+                    + newClassInstance.getClassType().getClassName().getName(), true)).getClassDeclaration();
+            ArrayList<Type> classConstructorArgTypes = new ArrayList<>();
+            if (classDeclaration.getConstructor() != null) {
+                for (VarDeclaration argDec : classDeclaration.getConstructor().getArgs())
+                    classConstructorArgTypes.add(argDec.getType());
             }
-        }
-        commands += "invokespecial " + newClassInstance.getClassType().getClassName()
-                + "/<init>(" + makeFuncArgsSignature(classConstuctorArgTypes) + ")V\n";
-
+            commands += "invokespecial " + newClassInstance.getClassType().getClassName()
+                    + "/<init>(" + makeFuncArgsSignature(classConstructorArgTypes) + ")V\n";
+        } catch (ItemNotFoundException ignored) {}
         return commands;
     }
 
