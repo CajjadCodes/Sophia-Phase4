@@ -432,10 +432,11 @@ public class CodeGenerator extends Visitor<String> {
         popLabels();
 
         addCommand(nFalse + ":");
-        pushLabels(getTopAfterLabel(), getTopBrkLabel(), getTopContLabel());
-        conditionalStmt.getThenBody().accept(this);
-        popLabels();
-
+        if (conditionalStmt.getElseBody() != null) {
+            pushLabels(getTopAfterLabel(), getTopBrkLabel(), getTopContLabel());
+            conditionalStmt.getElseBody().accept(this);
+            popLabels();
+        }
         return null;
     }
 
