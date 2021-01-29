@@ -287,7 +287,13 @@ public class CodeGenerator extends Visitor<String> {
     }
 
     private void addStaticMainMethod() {
-        //todo
+        addCommand(".method public static main ([Ljava/lang/String;)V");
+        addCommand(".limit stack 128");
+        addCommand(".limit locals 128");
+        addCommand("new Main");
+        addCommand("invokespecial Main/<init>()V");
+        addCommand("return");
+        addCommand(".end method");
     }
 
     private int slotOf(String identifier) {
@@ -487,7 +493,7 @@ public class CodeGenerator extends Visitor<String> {
 
     @Override
     public String visit(ForStmt forStmt) {
-        //todo
+
         return null;
     }
 
