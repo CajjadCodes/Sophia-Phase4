@@ -348,12 +348,33 @@ public class CodeGenerator extends Visitor<String> {
 
     @Override
     public String visit(MethodDeclaration methodDeclaration) {
+        this.currentMethod = methodDeclaration;
+        this.expressionTypeChecker.setCurrentMethod(methodDeclaration);
+        this.labelCounter = 0;
+        this.labelsStack.clear();
+        this.currentSlots.clear();
+        this.currentSlots.add("this");
+
         //todo add method or constructor headers
         if(methodDeclaration instanceof ConstructorDeclaration) {
             //todo call parent constructor
             //todo initialize fields
         }
-        //todo visit local vars and body and add return if needed
+        for (VarDeclaration varDeclaration : methodDeclaration.getLocalVars()) {
+            varDeclaration.accept(this);
+        }
+
+        for (Statement statement : methodDeclaration.getBody()) {
+            String nAfter = getNewLabel();
+            pushLabels(nAfter, nAfter, nAfter);
+            statement.accept(this);
+            popLabels();
+            addCommand(nAfter + ":");
+        }
+        if (methodDeclaration.getReturnType() instanceof NullType) {
+            addCommand("return");
+        }
+        addCommand(".end method");
         return null;
     }
 
@@ -366,25 +387,47 @@ public class CodeGenerator extends Visitor<String> {
 
     @Override
     public String visit(VarDeclaration varDeclaration) {
-        //todo
+        this.currentSlots.add(varDeclaration.getVarName().getName());
         return null;
     }
 
     @Override
     public String visit(AssignmentStmt assignmentStmt) {
-        //todo
+        BinaryExpression assignmentExpression = new BinaryExpression(assignmentStmt.getlValue(),
+                assignmentStmt.getrValue(), BinaryOperator.assign);
+        addCommand(assignmentExpression.accept(this));
+        addCommand("pop");
         return null;
     }
 
     @Override
     public String visit(BlockStmt blockStmt) {
-        //todo
+        for (Statement statement : blockStmt.getStatements()) {
+            String nAfter = getNewLabel();
+            pushLabels(nAfter, nAfter, nAfter);
+            statement.accept(this);
+            popLabels();
+            addCommand(nAfter + ":");
+        }
         return null;
     }
 
     @Override
     public String visit(ConditionalStmt conditionalStmt) {
-        //todo
+        String nTrue = getNewLabel();
+        String nFalse = getNewLabel();
+        branch(conditionalStmt.getCondition(), nTrue, nFalse);
+
+        addCommand(nTrue + ":");
+        pushLabels(getTopAfterLabel(), getTopBrkLabel(), getTopContLabel());
+        conditionalStmt.getThenBody().accept(this);
+        popLabels();
+
+        addCommand(nFalse + ":");
+        pushLabels(getTopAfterLabel(), getTopBrkLabel(), getTopContLabel());
+        conditionalStmt.getThenBody().accept(this);
+        popLabels();
+
         return null;
     }
 
@@ -414,13 +457,13 @@ public class CodeGenerator extends Visitor<String> {
 
     @Override
     public String visit(BreakStmt breakStmt) {
-        //todo
+        addCommand("goto " + getTopBrkLabel());
         return null;
     }
 
     @Override
     public String visit(ContinueStmt continueStmt) {
-        //todo
+        addCommand("goto " + getTopContLabel());
         return null;
     }
 
