@@ -397,6 +397,7 @@ public class CodeGenerator extends Visitor<String> {
                 assignmentStmt.getrValue(), BinaryOperator.assign);
         addCommand(assignmentExpression.accept(this));
         addCommand("pop");
+        addCommand("goto " + getTopAfterLabel()); //necessary?
         return null;
     }
 
@@ -409,6 +410,7 @@ public class CodeGenerator extends Visitor<String> {
             popLabels();
             addCommand(nAfter + ":");
         }
+        addCommand("goto " + getTopAfterLabel()); //necessary?
         return null;
     }
 
@@ -433,13 +435,21 @@ public class CodeGenerator extends Visitor<String> {
 
     @Override
     public String visit(MethodCallStmt methodCallStmt) {
-        //todo
+        expressionTypeChecker.setIsInMethodCallStmt(true);
+        addCommand(methodCallStmt.getMethodCall().accept(this));
+        expressionTypeChecker.setIsInMethodCallStmt(false);
+        addCommand("pop");
+        addCommand("goto " + getTopAfterLabel()); //necessary?
         return null;
     }
 
     @Override
     public String visit(PrintStmt print) {
-        //todo
+        Type argType = print.getArg().accept(expressionTypeChecker);
+        addCommand("getstatic java/lang/System/out Ljava/io/PrintStream;");
+        addCommand(print.getArg().accept(this));
+        addCommand("invokevirtual java/io/PrintStream/Println(" + makeTypeSignature(argType) + ")V");
+        addCommand("goto " + getTopAfterLabel()); //necessary?
         return null;
     }
 
@@ -450,7 +460,9 @@ public class CodeGenerator extends Visitor<String> {
             addCommand("return");
         }
         else {
-            //todo add commands to return
+            addCommand(returnStmt.getReturnedExpr().accept(this));
+            //todo cast int and bool
+            addCommand("areturn");
         }
         return null;
     }
