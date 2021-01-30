@@ -464,13 +464,26 @@ public class CodeGenerator extends Visitor<String> {
 
     @Override
     public String visit(ReturnStmt returnStmt) {
-        Type type = returnStmt.getReturnedExpr().accept(expressionTypeChecker);
-        if(type instanceof NullType) {
+        Type returnType = returnStmt.getReturnedExpr().accept(expressionTypeChecker);
+        if(returnType instanceof NullType) {
             addCommand("return");
+        }
+        else if (returnType instanceof IntType) {
+            addCommand("new java/lang/Integer");
+            addCommand("dup");
+            addCommand(returnStmt.getReturnedExpr().accept(this));
+            addCommand("invokespecial java/lang/Integer/<init>(I)V");
+            addCommand("areturn");
+        }
+        else if (returnType instanceof BoolType) {
+            addCommand("new java/lang/Boolean");
+            addCommand("dup");
+            addCommand(returnStmt.getReturnedExpr().accept(this));
+            addCommand("invokespecial java/lang/Boolean/<init>(Z)V");
+            addCommand("areturn");
         }
         else {
             addCommand(returnStmt.getReturnedExpr().accept(this));
-            //todo cast int and bool
             addCommand("areturn");
         }
         return null;
@@ -490,7 +503,41 @@ public class CodeGenerator extends Visitor<String> {
 
     @Override
     public String visit(ForeachStmt foreachStmt) {
-        //todo
+        String nAfter = getTopAfterLabel();
+
+        String nInit = getNewLabel();
+        String nCond = getNewLabel();
+        String nBody = getNewLabel();
+        String nUpdate = getNewLabel();
+
+        int tempSlot = slotOf("");
+
+        /*init*/
+        addCommand(nInit + ":");
+        addCommand("ldc 0") ;
+        addCommand("istore" + underlineOrSpace(tempSlot) + tempSlot);
+
+        /*condition check*/
+        addCommand(nCond + ":");
+        addCommand("iload" + underlineOrSpace(tempSlot) + tempSlot);
+        addCommand(foreachStmt.getList().accept(this));
+        addCommand("invokevirtual java/util/ArrayList/size()I");
+        addCommand("if_icmpge " + nAfter);
+
+        /*body*/
+        addCommand(nBody + ":");
+        pushLabels(nUpdate, nAfter, nUpdate);
+        foreachStmt.getBody().accept(this);
+        popLabels();
+
+        /*update*/
+        addCommand(nUpdate + ":");
+        addCommand("iload" + underlineOrSpace(tempSlot) + tempSlot);
+        addCommand("iconst_1");
+        addCommand("iadd");
+        addCommand("istore" + underlineOrSpace(tempSlot) + tempSlot);
+        addCommand("goto " + nCond);
+
         return null;
     }
 
@@ -501,6 +548,7 @@ public class CodeGenerator extends Visitor<String> {
         String nInit = getNewLabel();
         String nCond = getNewLabel();
         String nBody = getNewLabel();
+        String nUpdate = getNewLabel();
 
         addCommand(nInit + ":");
         if (forStmt.getInitialize() != null) {
@@ -514,9 +562,14 @@ public class CodeGenerator extends Visitor<String> {
 
         addCommand(nBody + ":");
         if (forStmt.getBody() != null) {
-            pushLabels(nCond, nAfter, nCond);
+            pushLabels(nUpdate, nAfter, nUpdate);
             forStmt.getBody().accept(this);
             popLabels();
+        }
+
+        addCommand(nUpdate + ":");
+        if (forStmt.getUpdate() != null) {
+            forStmt.getUpdate().accept(this);
         }
 
         return null;
