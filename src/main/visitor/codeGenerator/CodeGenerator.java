@@ -40,6 +40,7 @@ import main.visitor.typeChecker.ExpressionTypeChecker;
 
 import java.io.*;
 import java.util.ArrayList;
+import java.util.List;
 
 public class CodeGenerator extends Visitor<String> {
     ExpressionTypeChecker expressionTypeChecker;
@@ -209,11 +210,11 @@ public class CodeGenerator extends Visitor<String> {
     private String makeTypeSignature(Type t) {
         String signature = "";
         if (t instanceof IntType)
-            signature += "Ljava/lang/Integer";
+            signature += "Ljava/lang/Integer;";
         else if (t instanceof BoolType)
-            signature += "Ljava/lang/Boolean";
+            signature += "Ljava/lang/Boolean;";
         else if (t instanceof StringType)
-            signature += "Ljava/lang/String";
+            signature += "Ljava/lang/String;";
         else if (t instanceof ListType)
             signature += "LList;";
         else if (t instanceof FptrType)
@@ -231,8 +232,7 @@ public class CodeGenerator extends Visitor<String> {
         return signature;
     }
 
-    private void initFieldDeclaration(FieldDeclaration fieldDeclaration) {
-        Type fieldType = fieldDeclaration.getVarDeclaration().getType();
+    private void initializeType(Type fieldType) {
         if (fieldType instanceof IntType) {
             addCommand("new java/lang/Integer");
             addCommand("dup");
@@ -249,22 +249,38 @@ public class CodeGenerator extends Visitor<String> {
             addCommand("new java/lang/String");
             addCommand("dup");
             addCommand("ldc \"\"");
-            addCommand("invokespecial java/lang/String/<init>(Ljava/lang/String;)V"); //maybe wrong
+            addCommand("invokespecial java/lang/String/<init>(Ljava/lang/String;)V");
         }
         else if (fieldType instanceof ListType) {
-            ArrayList<ListNameType> listNameTypes = ((ListType)fieldType).getElementsTypes();
+            ListType listType = (ListType) fieldType;
             addCommand("new List");
-            addCommand("dup ");
-            for (ListNameType listNameType : listNameTypes) { //todo
+            addCommand("dup");
 
+            addCommand("new java/util/ArrayList");
+            addCommand("dup");
+            addCommand("invokespecial java/util/ArrayList/<init>()V");
+            for (ListNameType listNameType : listType.getElementsTypes()) {
+                addCommand("dup");
+                initializeType(listNameType.getType());
+                addCommand("invokevirtual java/util/ArrayList/add(Ljava/lang/Object;)V");
             }
+
+            addCommand("invokespecial List/<init>(Ljava/util/ArrayList;)V");
         }
         else if (fieldType instanceof FptrType) {
-            addCommand("ldc null");
+            addCommand("aconst_null");
         }
         else if (fieldType instanceof ClassType) {
-            addCommand("ldc null");
+            addCommand("aconst_null");
         }
+    }
+
+    public ArrayList<Type> getVarDecArrayTypes(ArrayList<VarDeclaration> varDecArray) {
+        ArrayList<Type> types = new ArrayList<>();
+        for (VarDeclaration varDeclaration : varDecArray) {
+            types.add(varDeclaration.getType());
+        }
+        return types;
     }
 
     private void addDefaultConstructor() {
@@ -278,7 +294,7 @@ public class CodeGenerator extends Visitor<String> {
 
         for (FieldDeclaration fieldDeclaration : this.currentClass.getFields()) {
             addCommand("aload_0");
-            initFieldDeclaration(fieldDeclaration);
+            initializeType(fieldDeclaration.getVarDeclaration().getType());
             addCommand("putfield " + this.currentClass.getClassName().getName()
                     + "/" + fieldDeclaration.getVarDeclaration().getVarName().getName()
                     + " " + makeTypeSignature(fieldDeclaration.getVarDeclaration().getType()));
@@ -300,7 +316,6 @@ public class CodeGenerator extends Visitor<String> {
 
     private int slotOf(String identifier) {
         if (identifier.equals("")) {
-            this.tempVarNumber++;
             return this.currentSlots.size() + this.tempVarNumber;
         }
         for (int i = 0; i < this.currentSlots.size(); i++) {
@@ -331,14 +346,15 @@ public class CodeGenerator extends Visitor<String> {
             addCommand(".super " + classDeclaration.getParentClassName().getName());
         addBlankLine();
 
-        addDefaultConstructor();
-        if (classDeclaration.getConstructor() != null)
-            classDeclaration.getConstructor().accept(this);
-        addBlankLine();
-
         for (FieldDeclaration fieldDeclaration : classDeclaration.getFields()) {
             fieldDeclaration.accept(this);
         }
+        addBlankLine();
+
+        if (classDeclaration.getConstructor() != null)
+            classDeclaration.getConstructor().accept(this);
+        else
+            addDefaultConstructor();
         addBlankLine();
 
         for (MethodDeclaration methodDeclaration : classDeclaration.getMethods()) {
@@ -349,8 +365,12 @@ public class CodeGenerator extends Visitor<String> {
 
     @Override
     public String visit(ConstructorDeclaration constructorDeclaration) {
-        //todo add default constructor or static main method if needed
+        if (constructorDeclaration.getArgs().size() != 0)
+            addDefaultConstructor();
         this.visit((MethodDeclaration) constructorDeclaration);
+        if (constructorDeclaration.getMethodName().getName().equals("Main")) {
+            addStaticMainMethod();
+        }
         return null;
     }
 
@@ -363,11 +383,32 @@ public class CodeGenerator extends Visitor<String> {
         this.currentSlots.clear();
         this.currentSlots.add("this");
 
-        //todo add method or constructor headers
         if(methodDeclaration instanceof ConstructorDeclaration) {
-            //todo call parent constructor
-            //todo initialize fields
+            addCommand(".method public <init>(" + makeFuncArgsSignature(getVarDecArrayTypes(methodDeclaration.getArgs())) + ")V");
+
+            addCommand("aload_0");
+            if (this.currentClass.getParentClassName() != null)
+                addCommand("invokespecial " + this.currentClass.getParentClassName().getName() + "/<init>()V");
+            else
+                addCommand("invokespecial java/lang/Object/<init>()V");
+
+            for (FieldDeclaration fieldDeclaration : this.currentClass.getFields()) {
+                addCommand("aload_0");
+                initializeType(fieldDeclaration.getVarDeclaration().getType());
+                addCommand("putfield " + this.currentClass.getClassName().getName()
+                        + "/" + fieldDeclaration.getVarDeclaration().getVarName().getName()
+                        + " " + makeTypeSignature(fieldDeclaration.getVarDeclaration().getType()));
+            }
         }
+        else {
+            addCommand(".method public " + methodDeclaration.getMethodName().getName()
+                    + makeFuncArgsSignature(getVarDecArrayTypes(methodDeclaration.getArgs())) + ")"
+                    + makeTypeSignature(methodDeclaration.getReturnType()));
+        }
+
+        addCommand(".limit stack 128");
+        addCommand(".limit locals 128");
+
         for (VarDeclaration varDeclaration : methodDeclaration.getLocalVars()) {
             varDeclaration.accept(this);
         }
@@ -379,7 +420,7 @@ public class CodeGenerator extends Visitor<String> {
             popLabels();
             addCommand(nAfter + ":");
         }
-        if (methodDeclaration.getReturnType() instanceof NullType) {
+        if ((methodDeclaration instanceof ConstructorDeclaration) || (methodDeclaration.getReturnType() instanceof NullType)) {
             addCommand("return");
         }
         addCommand(".end method");
@@ -413,7 +454,7 @@ public class CodeGenerator extends Visitor<String> {
     public String visit(BlockStmt blockStmt) {
         for (Statement statement : blockStmt.getStatements()) {
             String nAfter = getNewLabel();
-            pushLabels(nAfter, nAfter, nAfter);
+            pushLabels(nAfter, getTopBrkLabel(), getTopContLabel());
             statement.accept(this);
             popLabels();
             addCommand(nAfter + ":");
@@ -510,6 +551,7 @@ public class CodeGenerator extends Visitor<String> {
         String nBody = getNewLabel();
         String nUpdate = getNewLabel();
 
+        this.tempVarNumber++;
         int tempSlot = slotOf("");
 
         /*init*/
@@ -537,6 +579,8 @@ public class CodeGenerator extends Visitor<String> {
         addCommand("iadd");
         addCommand("istore" + underlineOrSpace(tempSlot) + tempSlot);
         addCommand("goto " + nCond);
+
+        this.tempVarNumber--;
 
         return null;
     }
@@ -818,6 +862,8 @@ public class CodeGenerator extends Visitor<String> {
         commands += "dup\n";
         commands += "invokespecial java/util/ArrayList/<init>()V\n";
         for (Expression methodArgs : methodCall.getArgs()) {
+            commands += "dup\n";
+
             Type argType = methodArgs.accept(expressionTypeChecker);
             if (argType instanceof IntType) {
                 commands += "new java/lang/Integer\n";
@@ -916,7 +962,11 @@ public class CodeGenerator extends Visitor<String> {
 
         commands += "new java/util/ArrayList\n";
         commands += "dup\n";
+        commands += "invokespecial java/util/ArrayList/<init>()V\n";
+
         for (Expression expr : listValue.getElements()) {
+            commands += "dup\n";
+
             Type exprType = expr.accept(expressionTypeChecker);
             if (exprType instanceof IntType) {
                 commands += "new java/lang/Integer\n";
@@ -933,8 +983,9 @@ public class CodeGenerator extends Visitor<String> {
             else {
                 commands += expr.accept(this);
             }
+            commands += "invokevirtual java/util/ArrayList/add(Ljava/lang/Object;)Z\n";
+            commands += "pop\n";
         }
-        commands += "invokespecial java/util/ArrayList/<init>()V\n";
 
         commands += "invokespecial List/<init>(Ljava/util/ArrayList;)V\n";
         return commands;
