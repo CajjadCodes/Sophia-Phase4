@@ -32,6 +32,8 @@ import main.symbolTable.SymbolTable;
 import main.symbolTable.exceptions.ItemNotFoundException;
 import main.symbolTable.items.ClassSymbolTableItem;
 import main.symbolTable.items.FieldSymbolTableItem;
+import main.symbolTable.items.LocalVariableSymbolTableItem;
+import main.symbolTable.items.MethodSymbolTableItem;
 import main.symbolTable.utils.graph.Graph;
 import main.visitor.Visitor;
 import main.visitor.typeChecker.ExpressionTypeChecker;
@@ -651,7 +653,7 @@ public class CodeGenerator extends Visitor<String> {
                     commands += "new Fptr\n";
                     commands += "dup\n";
                     commands += objectOrListMemberAccess.getInstance().accept(this);
-                    commands += "ldc " + memberName + "\n";
+                    commands += "ldc \"" + memberName + "\"\n";
                     commands += "invokespecial Fptr/<init>(Ljava/lang/Object;Ljava/lang/String;)V\n";
                 }
             } catch (ItemNotFoundException classNotFound) {
@@ -659,7 +661,7 @@ public class CodeGenerator extends Visitor<String> {
         }
         else if(instanceType instanceof ListType) {
             ListType listType = (ListType) instanceType;
-            int index = 0;
+            int index;
             for (index = 0; index < listType.getElementsTypes().size(); index++) {
                 if (listType.getElementsTypes().get(index).getName().getName().equals(memberName))
                     break;
@@ -667,6 +669,22 @@ public class CodeGenerator extends Visitor<String> {
             commands += objectOrListMemberAccess.getInstance().accept(this);
             commands += "ldc " + index + "\n";
             commands += "invokevirtual List/getElement(I)Ljava/lang/Object;\n";
+
+            Type elementType = listType.getElementsTypes().get(index).getType();
+            if (elementType instanceof BoolType) {
+                commands += "checkcast java/lang/Boolean\n";
+                commands += "invokevirtual java/lang/Boolean/booleanValue()Z\n";
+            }
+            else if (elementType instanceof ClassType) {
+                commands += "checkcast " + ((ClassType)elementType).getClassName().getName() + "\n";
+            }
+            else if (elementType instanceof IntType) {
+                commands += "checkcast java/lang/Integer\n";
+                commands += "invokevirtual java/lang/Integer/intValue()I\n";
+            }
+            else if (elementType instanceof StringType) {
+                commands += "checkcast java/lang/String\n";
+            }
         }
         return commands;
     }
@@ -675,8 +693,28 @@ public class CodeGenerator extends Visitor<String> {
     public String visit(Identifier identifier) {
         String commands = "";
         int slot = slotOf(identifier.getName());
-        commands += "aload" + underlineOrSpace(slot) + slot + "\n";
-        //todo cast to primitive int and bool
+
+        try {
+            ClassSymbolTableItem classSymbolTableItem = (ClassSymbolTableItem) SymbolTable.root.getItem(ClassSymbolTableItem.START_KEY + this.currentClass.getClassName().getName(), true);
+            SymbolTable classSymbolTable = classSymbolTableItem.getClassSymbolTable();
+            MethodSymbolTableItem methodSymbolTableItem = (MethodSymbolTableItem) classSymbolTable.getItem(MethodSymbolTableItem.START_KEY + this.currentMethod.getMethodName().getName(), true);
+            SymbolTable methodSymbolTable = methodSymbolTableItem.getMethodSymbolTable();
+            LocalVariableSymbolTableItem localVariableSymbolTableItem = (LocalVariableSymbolTableItem) methodSymbolTable.getItem(LocalVariableSymbolTableItem.START_KEY + identifier.getName(), true);
+            Type varType = localVariableSymbolTableItem.getType();
+            if (varType instanceof IntType) {
+                commands += "aload" + underlineOrSpace(slot) + slot + "\n";
+                commands += "invokevirtual java/lang/Integer/intValue()I\n";
+
+            }
+            else if (varType instanceof BoolType) {
+                commands += "aload" + underlineOrSpace(slot) + slot + "\n";
+                commands += "invokevirtual java/lang/Boolean/booleanValue()Z\n";
+            }
+            else {
+                commands += "aload" + underlineOrSpace(slot) + slot + "\n";
+            }
+        } catch (ItemNotFoundException ignored) {}
+
         return commands;
     }
 
@@ -684,9 +722,38 @@ public class CodeGenerator extends Visitor<String> {
     public String visit(ListAccessByIndex listAccessByIndex) {
         String commands = "";
         commands += listAccessByIndex.getInstance().accept(this);
+
+        commands += "new java/lang/Integer\n";
+        commands += "dup\n";
         commands += listAccessByIndex.getIndex().accept(this);
-        //todo cast to primitive
+        commands += "invokespecial java/lang/Integer/<init>(I)V\n";
+
         commands += "invokevirtual List/getElement(I)Ljava/lang/Object;\n";
+
+        ListType instanceType = (ListType) listAccessByIndex.getInstance().accept(expressionTypeChecker);
+        Type elementType;
+        if (listAccessByIndex.getIndex() instanceof IntValue) {
+            elementType = instanceType.getElementsTypes().get(((IntValue)listAccessByIndex.getIndex()).getConstant()).getType();
+        }
+        else {
+            elementType = instanceType.getElementsTypes().get(0).getType();
+        }
+
+        if (elementType instanceof BoolType) {
+            commands += "checkcast java/lang/Boolean\n";
+            commands += "invokevirtual java/lang/Boolean/booleanValue()Z\n";
+        }
+        else if (elementType instanceof ClassType) {
+            commands += "checkcast " + ((ClassType)elementType).getClassName().getName() + "\n";
+        }
+        else if (elementType instanceof IntType) {
+            commands += "checkcast java/lang/Integer\n";
+            commands += "invokevirtual java/lang/Integer/intValue()I\n";
+        }
+        else if (elementType instanceof StringType) {
+            commands += "checkcast java/lang/String\n";
+        }
+
         return commands;
     }
 
@@ -698,12 +765,48 @@ public class CodeGenerator extends Visitor<String> {
         commands += "dup\n";
         commands += "invokespecial java/util/ArrayList/<init>()V\n";
         for (Expression methodArgs : methodCall.getArgs()) {
-            commands += methodArgs.accept(this);
-            //todo check for int bool casting
+            Type argType = methodArgs.accept(expressionTypeChecker);
+            if (argType instanceof IntType) {
+                commands += "new java/lang/Integer\n";
+                commands += "dup\n";
+                commands += methodArgs.accept(this);
+                commands += "invokespecial java/lang/Integer/<init>(I)V\n";
+            }
+            else if (argType instanceof BoolType) {
+                commands += "new java/lang/Boolean\n";
+                commands += "dup\n";
+                commands += methodArgs.accept(this);
+                commands += "invokespecial java/lang/Boolean/<init>(Z)V\n";
+            }
+            else {
+                commands += methodArgs.accept(this);
+            }
+
             commands += "invokevirtual java/util/ArrayList/add(Ljava/lang/Object;)Z\n";
             commands += "pop\n";
         }
-        commands += "invokevirtual List/invoke(Ljava/util/ArrayList;)Ljava/lang/Object;\n";
+
+        commands += "invokevirtual Fptr/invoke(Ljava/util/ArrayList;)Ljava/lang/Object;\n";
+
+        FptrType instanceType = (FptrType) methodCall.getInstance().accept(expressionTypeChecker);
+        if (instanceType.getReturnType() instanceof BoolType) {
+            commands += "checkcast java/lang/Boolean\n";
+            commands += "invokevirtual java/lang/Boolean/booleanValue()Z\n";
+        }
+        else if (instanceType.getReturnType() instanceof ClassType) {
+            commands += "checkcast " + ((ClassType)instanceType.getReturnType()).getClassName().getName() + "\n";
+        }
+        else if (instanceType.getReturnType() instanceof IntType) {
+            commands += "checkcast java/lang/Integer\n";
+            commands += "invokevirtual java/lang/Integer/intValue()I\n";
+        }
+        else if (instanceType.getReturnType() instanceof StringType) {
+            commands += "checkcast java/lang/String\n";
+        }
+        else if (instanceType.getReturnType() instanceof NullType) {
+            commands += "pop\n"; //is it correct for null?
+        }
+
         return commands;
     }
 
@@ -714,8 +817,22 @@ public class CodeGenerator extends Visitor<String> {
         commands += "dup\n";
 
         for (Expression arg : newClassInstance.getArgs()) {
-            commands += arg.accept(this);
-            //todo check if its int or bool and should be casted to Integer and Boolean
+            Type argType = arg.accept(expressionTypeChecker);
+            if (argType instanceof IntType) {
+                commands += "new java/lang/Integer\n";
+                commands += "dup\n";
+                commands += arg.accept(this);
+                commands += "invokespecial java/lang/Integer/<init>(I)V\n";
+            }
+            else if (argType instanceof BoolType) {
+                commands += "new java/lang/Boolean\n";
+                commands += "dup\n";
+                commands += arg.accept(this);
+                commands += "invokespecial java/lang/Boolean/<init>(Z)V\n";
+            }
+            else {
+                commands += arg.accept(this);
+            }
         }
         try {
             ClassDeclaration classDeclaration = ((ClassSymbolTableItem) SymbolTable.root.getItem(ClassSymbolTableItem.START_KEY
@@ -747,8 +864,22 @@ public class CodeGenerator extends Visitor<String> {
         commands += "new java/util/ArrayList\n";
         commands += "dup\n";
         for (Expression expr : listValue.getElements()) {
-            commands += expr.accept(this);
-            //todo check for primitive casting (bool and int)
+            Type exprType = expr.accept(expressionTypeChecker);
+            if (exprType instanceof IntType) {
+                commands += "new java/lang/Integer\n";
+                commands += "dup\n";
+                commands += expr.accept(this);
+                commands += "invokespecial java/lang/Integer/<init>(I)V\n";
+            }
+            else if (exprType instanceof BoolType) {
+                commands += "new java/lang/Boolean\n";
+                commands += "dup\n";
+                commands += expr.accept(this);
+                commands += "invokespecial java/lang/Boolean/<init>(Z)V\n";
+            }
+            else {
+                commands += expr.accept(this);
+            }
         }
         commands += "invokespecial java/util/ArrayList/<init>()V\n";
 
@@ -759,7 +890,7 @@ public class CodeGenerator extends Visitor<String> {
     @Override
     public String visit(NullValue nullValue) {
         String commands = "";
-        commands += "ldc null\n";
+        commands += "aconst_null\n";
         return commands;
     }
 
