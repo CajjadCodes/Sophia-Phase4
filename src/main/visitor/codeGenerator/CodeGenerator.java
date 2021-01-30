@@ -316,7 +316,7 @@ public class CodeGenerator extends Visitor<String> {
 
     private int slotOf(String identifier) {
         if (identifier.equals("")) {
-            return this.currentSlots.size() + this.tempVarNumber;
+            return this.currentSlots.size()-1 + this.tempVarNumber;
         }
         for (int i = 0; i < this.currentSlots.size(); i++) {
             if (this.currentSlots.get(i).equals(identifier))
@@ -624,44 +624,159 @@ public class CodeGenerator extends Visitor<String> {
         BinaryOperator operator = binaryExpression.getBinaryOperator();
         String commands = "";
         if (operator == BinaryOperator.add) {
-            //todo
+            commands += binaryExpression.getFirstOperand().accept(this);
+            commands += binaryExpression.getSecondOperand().accept(this);
+            commands += "iadd\n";
         }
         else if (operator == BinaryOperator.sub) {
-            //todo
+            commands += binaryExpression.getFirstOperand().accept(this);
+            commands += binaryExpression.getSecondOperand().accept(this);
+            commands += "isub\n";
         }
         else if (operator == BinaryOperator.mult) {
-            //todo
+            commands += binaryExpression.getFirstOperand().accept(this);
+            commands += binaryExpression.getSecondOperand().accept(this);
+            commands += "imult\n";
         }
         else if (operator == BinaryOperator.div) {
-            //todo
+            commands += binaryExpression.getFirstOperand().accept(this);
+            commands += binaryExpression.getSecondOperand().accept(this);
+            commands += "idiv\n";
         }
         else if (operator == BinaryOperator.mod) {
-            //todo
+            commands += binaryExpression.getFirstOperand().accept(this);
+            commands += binaryExpression.getSecondOperand().accept(this);
+            commands += "irem\n";
         }
         else if((operator == BinaryOperator.gt) || (operator == BinaryOperator.lt)) {
-            //todo
+            commands += binaryExpression.getFirstOperand().accept(this);
+            commands += binaryExpression.getSecondOperand().accept(this);
+
+            String nTrue = getNewLabel();
+            String nFalse = getNewLabel();
+            String nAfter = getNewLabel();
+            if (operator == BinaryOperator.gt)
+                commands += "if_icmpgt " + nTrue +"\n";
+            else
+                commands += "if_icmplt " + nTrue +"\n";
+            commands += nTrue + ":\n";
+            commands += "ldc 1\n";
+            commands += "goto " + nAfter + "\n";
+            commands += nFalse + ":\n";
+            commands += "ldc 0\n";
+            commands += nAfter + ":\n";
         }
         else if((operator == BinaryOperator.eq) || (operator == BinaryOperator.neq)) {
-            //todo
+            commands += binaryExpression.getFirstOperand().accept(this);
+            commands += binaryExpression.getSecondOperand().accept(this);
+
+            String nTrue = getNewLabel();
+            String nFalse = getNewLabel();
+            String nAfter = getNewLabel();
+            if (operator == BinaryOperator.eq)
+                commands += "if_icmpeq " + nTrue +"\n";
+            else
+                commands += "if_icmpne " + nTrue +"\n";
+            commands += nTrue + ":\n";
+            commands += "ldc 1\n";
+            commands += "goto " + nAfter + "\n";
+            commands += nFalse + ":\n";
+            commands += "ldc 0\n";
+            commands += nAfter + ":\n";
         }
         else if(operator == BinaryOperator.and) {
-            //todo
+            commands += binaryExpression.getFirstOperand().accept(this);
+            commands += binaryExpression.getSecondOperand().accept(this);
+            commands += "iand\n";
         }
         else if(operator == BinaryOperator.or) {
-            //todo
+            commands += binaryExpression.getFirstOperand().accept(this);
+            commands += binaryExpression.getSecondOperand().accept(this);
+            commands += "ior\n";
         }
         else if(operator == BinaryOperator.assign) {
             Type firstType = binaryExpression.getFirstOperand().accept(expressionTypeChecker);
             String secondOperandCommands = binaryExpression.getSecondOperand().accept(this);
             if(firstType instanceof ListType) {
-                //todo make new list with List copy constructor with the second operand commands
+                // make new list with List copy constructor with the second operand commands
                 // (add these commands to secondOperandCommands)
+                secondOperandCommands += "invokespecial List/<init>(LList;)V\n"; //not sure
             }
             if(binaryExpression.getFirstOperand() instanceof Identifier) {
-                //todo
+                Type secondType = binaryExpression.getSecondOperand().accept(this.expressionTypeChecker);
+                int slot = slotOf(((Identifier)binaryExpression.getFirstOperand()).getName());
+
+                if (secondType instanceof IntType) {
+                    commands += "new java/lang/Integer\n";
+                    commands += "dup\n";
+                    commands += secondOperandCommands;
+                    commands += "invokespecial java/lang/Integer/<init>(I)V\n";
+                    commands += "dup\n";
+                    commands += "astore" + underlineOrSpace(slot) + slot + "\n";
+                    commands += "invokevirtual java/lang/Integer/intValue()I\n";
+                }
+                else if (secondType instanceof BoolType) {
+                    commands += "new java/lang/Boolean\n";
+                    commands += "dup\n";
+                    commands += secondOperandCommands;
+                    commands += "invokespecial java/lang/Boolean/<init>(Z)V\n";
+                    commands += "dup\n";
+                    commands += "astore" + underlineOrSpace(slot) + slot + "\n";
+                    commands += "invokevirtual java/lang/Boolean/booleanValue()Z\n";
+                }
+                else {
+                    commands += secondOperandCommands;
+                    commands += "dup\n";
+                    commands += "astore" + underlineOrSpace(slot) + slot + "\n";
+                }
             }
             else if(binaryExpression.getFirstOperand() instanceof ListAccessByIndex) {
-                //todo
+                Type secondType = binaryExpression.getSecondOperand().accept(this.expressionTypeChecker);
+                ListAccessByIndex firstOperandListAccess = (ListAccessByIndex) binaryExpression.getFirstOperand();
+                this.tempVarNumber++;
+                int tempSlot = slotOf("");
+                if (secondType instanceof IntType) {
+                    commands += "new java/lang/Integer\n";
+                    commands += "dup\n";
+                    commands += secondOperandCommands;
+                    commands += "invokespecial java/lang/Integer/<init>(I)V\n";
+                    commands += "astore" + underlineOrSpace(tempSlot) + tempSlot + "\n";
+
+                    commands += firstOperandListAccess.getInstance().accept(this);
+                    commands += firstOperandListAccess.getIndex().accept(this);
+                    commands += "aload" + underlineOrSpace(tempSlot) + tempSlot + "\n";
+                    commands += "invokevirtual List/setElement(ILjava/lang/Object;)V\n";
+
+                    commands += "aload" + underlineOrSpace(tempSlot) + tempSlot + "\n";
+                    commands += "invokevirtual java/lang/Integer/intValue()I\n";
+                }
+                else if (secondType instanceof BoolType) {
+                    commands += "new java/lang/Boolean\n";
+                    commands += "dup\n";
+                    commands += secondOperandCommands;
+                    commands += "invokespecial java/lang/Boolean/<init>(Z)V\n";
+                    commands += "astore" + underlineOrSpace(tempSlot) + tempSlot + "\n";
+
+                    commands += firstOperandListAccess.getInstance().accept(this);
+                    commands += firstOperandListAccess.getIndex().accept(this);
+                    commands += "aload" + underlineOrSpace(tempSlot) + tempSlot + "\n";
+                    commands += "invokevirtual List/setElement(ILjava/lang/Object;)V\n";
+
+                    commands += "aload" + underlineOrSpace(tempSlot) + tempSlot + "\n";
+                    commands += "invokevirtual java/lang/Boolean/booleanValue()Z\n";
+                }
+                else {
+                    commands += secondOperandCommands;
+                    commands += "astore" + underlineOrSpace(tempSlot) + tempSlot + "\n";
+
+                    commands += firstOperandListAccess.getInstance().accept(this);
+                    commands += firstOperandListAccess.getIndex().accept(this);
+                    commands += "aload" + underlineOrSpace(tempSlot) + tempSlot + "\n";
+                    commands += "invokevirtual List/setElement(ILjava/lang/Object;)V\n";
+
+                    commands += "aload" + underlineOrSpace(tempSlot) + tempSlot + "\n";
+                }
+                this.tempVarNumber--;
             }
             else if(binaryExpression.getFirstOperand() instanceof ObjectOrListMemberAccess) {
                 Expression instance = ((ObjectOrListMemberAccess) binaryExpression.getFirstOperand()).getInstance();
@@ -670,9 +785,105 @@ public class CodeGenerator extends Visitor<String> {
                 Type instanceType = instance.accept(expressionTypeChecker);
                 if(instanceType instanceof ListType) {
                     //todo
+                    ListType instanceListType = (ListType) instanceType;
+                    int index;
+                    for (index = 0; index < instanceListType.getElementsTypes().size(); index++) {
+                        if (instanceListType.getElementsTypes().get(index).getName().getName().equals(memberName))
+                            break;
+                    }
+                    Type secondType = binaryExpression.getSecondOperand().accept(this.expressionTypeChecker);
+                    this.tempVarNumber++;
+                    int tempSlot = slotOf("");
+                    if (secondType instanceof IntType) {
+                        commands += "new java/lang/Integer\n";
+                        commands += "dup\n";
+                        commands += secondOperandCommands;
+                        commands += "invokespecial java/lang/Integer/<init>(I)V\n";
+                        commands += "astore" + underlineOrSpace(tempSlot) + tempSlot + "\n";
+
+                        commands += instance.accept(this);
+                        commands += "ldc " + index + "\n";
+                        commands += "aload" + underlineOrSpace(tempSlot) + tempSlot + "\n";
+                        commands += "invokevirtual List/setElement(ILjava/lang/Object;)V\n";
+
+                        commands += "aload" + underlineOrSpace(tempSlot) + tempSlot + "\n";
+                        commands += "invokevirtual java/lang/Integer/intValue()I\n";
+                    }
+                    else if (secondType instanceof BoolType) {
+                        commands += "new java/lang/Boolean\n";
+                        commands += "dup\n";
+                        commands += secondOperandCommands;
+                        commands += "invokespecial java/lang/Boolean/<init>(Z)V\n";
+                        commands += "astore" + underlineOrSpace(tempSlot) + tempSlot + "\n";
+
+                        commands += instance.accept(this);
+                        commands += "ldc " + index + "\n";
+                        commands += "aload" + underlineOrSpace(tempSlot) + tempSlot + "\n";
+                        commands += "invokevirtual List/setElement(ILjava/lang/Object;)V\n";
+
+                        commands += "aload" + underlineOrSpace(tempSlot) + tempSlot + "\n";
+                        commands += "invokevirtual java/lang/Boolean/booleanValue()Z\n";
+                    }
+                    else {
+                        commands += secondOperandCommands;
+                        commands += "astore" + underlineOrSpace(tempSlot) + tempSlot + "\n";
+
+                        commands += instance.accept(this);
+                        commands += "ldc " + index + "\n";
+                        commands += "aload" + underlineOrSpace(tempSlot) + tempSlot + "\n";
+                        commands += "invokevirtual List/setElement(ILjava/lang/Object;)V\n";
+
+                        commands += "aload" + underlineOrSpace(tempSlot) + tempSlot + "\n";
+                    }
+                    this.tempVarNumber--;
                 }
                 else if(instanceType instanceof ClassType) {
-                    //todo
+                    ClassType instanceClassType = (ClassType) instanceType;
+                    Type secondType = binaryExpression.getSecondOperand().accept(this.expressionTypeChecker);
+                    this.tempVarNumber++;
+                    int tempSlot = slotOf("");
+                    if (secondType instanceof IntType) {
+                        commands += "new java/lang/Integer\n";
+                        commands += "dup\n";
+                        commands += secondOperandCommands;
+                        commands += "invokespecial java/lang/Integer/<init>(I)V\n";
+                        commands += "astore" + underlineOrSpace(tempSlot) + tempSlot + "\n";
+
+                        commands += instance.accept(this);
+                        commands += "aload" + underlineOrSpace(tempSlot) + tempSlot + "\n";
+                        commands += "putfield " + instanceClassType.getClassName().getName()
+                                + "/" + memberName + " " + makeTypeSignature(memberType) + "\n";
+
+                        commands += "aload" + underlineOrSpace(tempSlot) + tempSlot + "\n";
+                        commands += "invokevirtual java/lang/Integer/intValue()I\n";
+                    }
+                    else if (secondType instanceof BoolType) {
+                        commands += "new java/lang/Boolean\n";
+                        commands += "dup\n";
+                        commands += secondOperandCommands;
+                        commands += "invokespecial java/lang/Boolean/<init>(Z)V\n";
+                        commands += "astore" + underlineOrSpace(tempSlot) + tempSlot + "\n";
+
+                        commands += instance.accept(this);
+                        commands += "aload" + underlineOrSpace(tempSlot) + tempSlot + "\n";
+                        commands += "putfield " + instanceClassType.getClassName().getName()
+                                + "/" + memberName + " " + makeTypeSignature(memberType) + "\n";
+
+                        commands += "aload" + underlineOrSpace(tempSlot) + tempSlot + "\n";
+                        commands += "invokevirtual java/lang/Boolean/booleanValue()Z\n";
+                    }
+                    else {
+                        commands += secondOperandCommands;
+                        commands += "astore" + underlineOrSpace(tempSlot) + tempSlot + "\n";
+
+                        commands += instance.accept(this);
+                        commands += "aload" + underlineOrSpace(tempSlot) + tempSlot + "\n";
+                        commands += "putfield " + instanceClassType.getClassName().getName()
+                                + "/" + memberName + " " + makeTypeSignature(memberType) + "\n";
+
+                        commands += "aload" + underlineOrSpace(tempSlot) + tempSlot + "\n";
+                    }
+                    this.tempVarNumber--;
                 }
             }
         }
@@ -684,10 +895,13 @@ public class CodeGenerator extends Visitor<String> {
         UnaryOperator operator = unaryExpression.getOperator();
         String commands = "";
         if(operator == UnaryOperator.minus) {
-            //todo
+            commands += unaryExpression.getOperand().accept(this);
+            commands += "ineg\n";
         }
         else if(operator == UnaryOperator.not) {
-            //todo
+            commands += unaryExpression.getOperand().accept(this);
+            commands += "ldc 1\n";
+            commands += "ixor\n";
         }
         else if((operator == UnaryOperator.predec) || (operator == UnaryOperator.preinc)) {
             if(unaryExpression.getOperand() instanceof Identifier) {
