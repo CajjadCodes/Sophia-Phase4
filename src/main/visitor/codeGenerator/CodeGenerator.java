@@ -281,6 +281,8 @@ public class CodeGenerator extends Visitor<String> {
 
     private void addDefaultConstructor() {
         addCommand(".method public <init>()V");
+        addCommand(".limit stack 128");
+        addCommand(".limit locals 128");
 
         addCommand("aload_0");
         if (this.currentClass.getParentClassName() != null)
@@ -298,6 +300,7 @@ public class CodeGenerator extends Visitor<String> {
 
         addCommand("return");
         addCommand(".end method");
+        addBlankLine();
     }
 
     private void addStaticMainMethod() {
@@ -355,6 +358,7 @@ public class CodeGenerator extends Visitor<String> {
 
         for (MethodDeclaration methodDeclaration : classDeclaration.getMethods()) {
             methodDeclaration.accept(this);
+            addBlankLine();
         }
         return null;
     }
@@ -381,6 +385,8 @@ public class CodeGenerator extends Visitor<String> {
 
         if(methodDeclaration instanceof ConstructorDeclaration) {
             addCommand(".method public <init>(" + makeFuncArgsSignature(getVarDecArrayTypes(methodDeclaration.getArgs())) + ")V");
+            addCommand(".limit stack 128");
+            addCommand(".limit locals 128");
 
             addCommand("aload_0");
             if (this.currentClass.getParentClassName() != null)
@@ -398,12 +404,11 @@ public class CodeGenerator extends Visitor<String> {
         }
         else {
             addCommand(".method public " + methodDeclaration.getMethodName().getName()
-                    + makeFuncArgsSignature(getVarDecArrayTypes(methodDeclaration.getArgs())) + ")"
+                    + "(" + makeFuncArgsSignature(getVarDecArrayTypes(methodDeclaration.getArgs())) + ")"
                     + makeTypeSignature(methodDeclaration.getReturnType()));
+            addCommand(".limit stack 128");
+            addCommand(".limit locals 128");
         }
-
-        addCommand(".limit stack 128");
-        addCommand(".limit locals 128");
 
         for (VarDeclaration varDeclaration : methodDeclaration.getLocalVars()) {
             varDeclaration.accept(this);
@@ -420,6 +425,7 @@ public class CodeGenerator extends Visitor<String> {
             addCommand("return");
         }
         addCommand(".end method");
+        addBlankLine();
         return null;
     }
 

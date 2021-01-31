@@ -1,0 +1,15 @@
+class Main{
+    london : int;
+  def Main() {
+    a : int;
+    a = 99;
+  }
+}
+class NiceClass {
+    arm : int;
+    def int wiseUp(a : int) {
+        b : int;
+        b = 3;
+        return a + b;
+    }
+}
