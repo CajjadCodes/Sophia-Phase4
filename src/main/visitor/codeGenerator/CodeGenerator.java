@@ -304,7 +304,7 @@ public class CodeGenerator extends Visitor<String> {
     }
 
     private void addStaticMainMethod() {
-        addCommand(".method public static main ([Ljava/lang/String;)V");
+        addCommand(".method public static main([Ljava/lang/String;)V");
         addCommand(".limit stack 128");
         addCommand(".limit locals 128");
         addCommand("new Main");
@@ -410,8 +410,15 @@ public class CodeGenerator extends Visitor<String> {
             addCommand(".limit locals 128");
         }
 
+        for (VarDeclaration varDeclaration: methodDeclaration.getArgs()) {
+            this.currentSlots.add(varDeclaration.getVarName().getName());
+        }
+
         for (VarDeclaration varDeclaration : methodDeclaration.getLocalVars()) {
             varDeclaration.accept(this);
+            int slot = slotOf(varDeclaration.getVarName().getName());
+            initializeType(varDeclaration.getType());
+            addCommand("astore" + underlineOrSpace(slot) + slot);
         }
 
         for (Statement statement : methodDeclaration.getBody()) {
@@ -421,7 +428,7 @@ public class CodeGenerator extends Visitor<String> {
             popLabels();
             addCommand(nAfter + ":");
         }
-        if ((methodDeclaration instanceof ConstructorDeclaration) || (methodDeclaration.getReturnType() instanceof NullType)) {
+        if (!methodDeclaration.getDoesReturn()) {
             addCommand("return");
         }
         addCommand(".end method");
@@ -500,8 +507,20 @@ public class CodeGenerator extends Visitor<String> {
         Type argType = print.getArg().accept(expressionTypeChecker);
         addCommand("getstatic java/lang/System/out Ljava/io/PrintStream;");
         addCommand(print.getArg().accept(this));
-        addCommand("invokevirtual java/io/PrintStream/Println(" + makeTypeSignature(argType) + ")V");
-        addCommand("goto " + getTopAfterLabel()); //necessary?
+
+        String signature = "";
+        if (argType instanceof IntType) {
+            signature = "I";
+        }
+        else if (argType instanceof BoolType) {
+            signature = "Z";
+        }
+        else {
+            signature = makeTypeSignature(argType);
+        }
+
+        addCommand("invokevirtual java/io/PrintStream/print(" + signature + ")V");
+        addCommand("goto " + getTopAfterLabel());
         return null;
     }
 
@@ -638,7 +657,7 @@ public class CodeGenerator extends Visitor<String> {
         else if (operator == BinaryOperator.mult) {
             commands += binaryExpression.getFirstOperand().accept(this);
             commands += binaryExpression.getSecondOperand().accept(this);
-            commands += "imult\n";
+            commands += "imul\n";
         }
         else if (operator == BinaryOperator.div) {
             commands += binaryExpression.getFirstOperand().accept(this);
@@ -1158,7 +1177,6 @@ public class CodeGenerator extends Visitor<String> {
                     this.tempVarNumber -= 2;
                 }
                 else if(instanceType instanceof ClassType) {
-                    //todo
                     ClassType classType = (ClassType) instanceType;
 
                     this.tempVarNumber++;
