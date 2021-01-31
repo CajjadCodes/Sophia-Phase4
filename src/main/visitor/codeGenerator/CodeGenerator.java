@@ -40,7 +40,6 @@ import main.visitor.typeChecker.ExpressionTypeChecker;
 
 import java.io.*;
 import java.util.ArrayList;
-import java.util.List;
 
 public class CodeGenerator extends Visitor<String> {
     ExpressionTypeChecker expressionTypeChecker;
@@ -50,7 +49,7 @@ public class CodeGenerator extends Visitor<String> {
     private ClassDeclaration currentClass;
     private MethodDeclaration currentMethod;
 
-    private Integer labelCounter;
+    private int labelCounter;
     private ArrayList<ArrayList<String>> labelsStack;
 
     private ArrayList<String> currentSlots;
@@ -60,6 +59,7 @@ public class CodeGenerator extends Visitor<String> {
         this.classHierarchy = classHierarchy;
         this.expressionTypeChecker = new ExpressionTypeChecker(classHierarchy);
         this.labelsStack = new ArrayList<>();
+        this.currentSlots = new ArrayList<>();
         this.prepareOutputFolder();
     }
 
@@ -135,10 +135,6 @@ public class CodeGenerator extends Visitor<String> {
         this.labelsStack.add(newLabels);
     }
 
-    private ArrayList<String> getTopLabels() {
-        return this.labelsStack.get(this.labelsStack.size() - 1);
-    }
-
     private String getTopAfterLabel() {
         return this.labelsStack.get(this.labelsStack.size() - 1).get(0);
     }
@@ -156,7 +152,7 @@ public class CodeGenerator extends Visitor<String> {
     }
 
     private String getNewLabel(){
-        String newLabel = "Label" + labelCounter.toString();
+        String newLabel = "Label" + labelCounter;
         labelCounter += 1;
         return newLabel;
     }
@@ -784,7 +780,6 @@ public class CodeGenerator extends Visitor<String> {
                 String memberName = ((ObjectOrListMemberAccess) binaryExpression.getFirstOperand()).getMemberName().getName();
                 Type instanceType = instance.accept(expressionTypeChecker);
                 if(instanceType instanceof ListType) {
-                    //todo
                     ListType instanceListType = (ListType) instanceType;
                     int index;
                     for (index = 0; index < instanceListType.getElementsTypes().size(); index++) {
@@ -905,10 +900,63 @@ public class CodeGenerator extends Visitor<String> {
         }
         else if((operator == UnaryOperator.predec) || (operator == UnaryOperator.preinc)) {
             if(unaryExpression.getOperand() instanceof Identifier) {
-                //todo
+                int slot = slotOf(((Identifier) unaryExpression.getOperand()).getName());
+
+                commands += "new java/lang/Integer\n";
+                commands += "dup\n";
+
+                commands += unaryExpression.getOperand().accept(this);
+                if (operator == UnaryOperator.preinc)
+                    commands += "ldc 1\n";
+                else
+                    commands += "ldc -1\n";
+                commands += "iadd\n";
+                commands += "invokespecial java/lang/Integer/<init>(I)V\n";
+                commands += "dup\n";
+                commands += "astore" + underlineOrSpace(slot) + slot + "\n";
+                commands += "invokevirtual java/lang/Integer/intValue()I\n";
             }
+
             else if(unaryExpression.getOperand() instanceof ListAccessByIndex) {
-                //todo
+                ListAccessByIndex unaryListAccess = (ListAccessByIndex) unaryExpression.getOperand();
+
+                this.tempVarNumber++;
+                int tempSlotInstance = slotOf("");
+                this.tempVarNumber++;
+                int tempSlotIndex = slotOf("");
+                this.tempVarNumber++;
+                int tempSlotResult = slotOf("");
+
+                commands += unaryListAccess.getInstance().accept(this);
+                commands += "astore" + underlineOrSpace(tempSlotInstance) + tempSlotInstance + "\n";
+                commands += unaryListAccess.getIndex().accept(this);
+                commands += "invokevirtual java/lang/Integer/intValue()I\n";
+                commands += "istore" + underlineOrSpace(tempSlotIndex) + tempSlotIndex + "\n";
+
+                commands += "aload" + underlineOrSpace(tempSlotInstance) + tempSlotInstance + "\n";
+                commands += "iload" + underlineOrSpace(tempSlotIndex) + tempSlotIndex + "\n";
+                commands += "invokevirtual List/getElement(I)Ljava/lang/Object;\n";
+                commands += "checkcast java/lang/Integer\n";
+                commands += "invokevirtual java/lang/Integer/intValue()I\n";
+                if (operator == UnaryOperator.preinc)
+                    commands += "ldc 1\n";
+                else
+                    commands += "ldc -1\n";
+                commands += "iadd\n";
+                commands += "istore" + underlineOrSpace(tempSlotResult) + tempSlotResult + "\n";
+
+                commands += "aload" + underlineOrSpace(tempSlotInstance) + tempSlotInstance + "\n";
+                commands += "iload" + underlineOrSpace(tempSlotIndex) + tempSlotIndex + "\n";
+                commands += "new java/lang/Integer\n";
+                commands += "dup\n";
+                commands += "iload" + underlineOrSpace(tempSlotResult) + tempSlotResult + "\n";
+                commands += "invokespecial java/lang/Integer/<init>(I)V\n";
+                commands += "invokevirtual List/setElement(ILjava/lang/Object;)V\n";
+
+                commands += "iload" + underlineOrSpace(tempSlotResult) + tempSlotResult + "\n";
+
+                this.tempVarNumber -= 3;
+
             }
             else if(unaryExpression.getOperand() instanceof ObjectOrListMemberAccess) {
                 Expression instance = ((ObjectOrListMemberAccess) unaryExpression.getOperand()).getInstance();
@@ -916,19 +964,145 @@ public class CodeGenerator extends Visitor<String> {
                 String memberName = ((ObjectOrListMemberAccess) unaryExpression.getOperand()).getMemberName().getName();
                 Type instanceType = instance.accept(expressionTypeChecker);
                 if(instanceType instanceof ListType) {
-                    //todo
+                    ListType instanceListType = (ListType) instanceType;
+                    int memberIndex;
+                    for (memberIndex = 0; memberIndex < instanceListType.getElementsTypes().size(); memberIndex++) {
+                        if (instanceListType.getElementsTypes().get(memberIndex).getName().getName().equals(memberName))
+                            break;
+                    }
+
+                    ListAccessByIndex unaryListAccess = (ListAccessByIndex) unaryExpression.getOperand();
+
+                    this.tempVarNumber++;
+                    int tempSlotInstance = slotOf("");
+                    this.tempVarNumber++;
+                    int tempSlotResult = slotOf("");
+
+                    commands += unaryListAccess.getInstance().accept(this);
+                    commands += "astore" + underlineOrSpace(tempSlotInstance) + tempSlotInstance + "\n";
+
+                    commands += "aload" + underlineOrSpace(tempSlotInstance) + tempSlotInstance + "\n";
+                    commands += "ldc " + memberIndex + "\n";
+                    commands += "invokevirtual List/getElement(I)Ljava/lang/Object;\n";
+                    commands += "checkcast java/lang/Integer\n";
+                    commands += "invokevirtual java/lang/Integer/intValue()I\n";
+                    if (operator == UnaryOperator.preinc)
+                        commands += "ldc 1\n";
+                    else
+                        commands += "ldc -1\n";
+                    commands += "iadd\n";
+                    commands += "istore" + underlineOrSpace(tempSlotResult) + tempSlotResult + "\n";
+
+                    commands += "aload" + underlineOrSpace(tempSlotInstance) + tempSlotInstance + "\n";
+                    commands += "ldc " + memberIndex + "\n";
+                    commands += "new java/lang/Integer\n";
+                    commands += "dup\n";
+                    commands += "iload" + underlineOrSpace(tempSlotResult) + tempSlotResult + "\n";
+                    commands += "invokespecial java/lang/Integer/<init>(I)V\n";
+                    commands += "invokevirtual List/setElement(ILjava/lang/Object;)V\n";
+
+                    commands += "iload" + underlineOrSpace(tempSlotResult) + tempSlotResult + "\n";
+
+                    this.tempVarNumber -= 2;
                 }
                 else if(instanceType instanceof ClassType) {
-                    //todo
+                    ClassType classType = (ClassType) instanceType;
+
+                    this.tempVarNumber++;
+                    int tempSlotInstance = slotOf("");
+                    this.tempVarNumber++;
+                    int tempSlotResult = slotOf("");
+
+                    commands += instance.accept(this);
+                    commands += "astore" + underlineOrSpace(tempSlotInstance) + tempSlotInstance;
+
+                    commands += "aload" + underlineOrSpace(tempSlotInstance) + tempSlotInstance + "\n";
+                    commands += "getfield " + classType.getClassName().getName() + "/" + memberName + " " + makeTypeSignature(memberType) + "\n";
+                    commands += "invokevirtual java/lang/Integer/intValue()I\n";
+                    if (operator == UnaryOperator.preinc)
+                        commands += "ldc 1\n";
+                    else
+                        commands += "ldc -1\n";
+                    commands += "iadd\n";
+                    commands += "istore" + underlineOrSpace(tempSlotResult) + tempSlotResult + "\n";
+
+                    commands += "aload" + underlineOrSpace(tempSlotInstance) + tempSlotInstance + "\n";
+                    commands += "new java/lang/Integer\n";
+                    commands += "dup\n";
+                    commands += "iload" + underlineOrSpace(tempSlotResult) + tempSlotResult + "\n";
+                    commands += "invokespecial java/lang/Integer/<init>(I)V\n";
+                    commands += "putfield " + classType.getClassName().getName() + "/" + memberName + " " + makeTypeSignature(memberType) + "\n";
+
+                    commands += "iload" + underlineOrSpace(tempSlotResult) + tempSlotResult + "\n";
+
+                    this.tempVarNumber -= 2;
                 }
             }
         }
         else if((operator == UnaryOperator.postdec) || (operator == UnaryOperator.postinc)) {
             if(unaryExpression.getOperand() instanceof Identifier) {
-                //todo
+                int slot = slotOf(((Identifier) unaryExpression.getOperand()).getName());
+
+                this.tempVarNumber++;
+                int tempSlot = slotOf("");
+
+                commands += unaryExpression.getOperand().accept(this);
+                commands += "istore" + underlineOrSpace(tempSlot) + tempSlot + "\n";
+
+                commands += "new java/lang/Integer\n";
+                commands += "dup\n";
+                commands += "iload" + underlineOrSpace(tempSlot) + tempSlot + "\n";
+                if (operator == UnaryOperator.postinc)
+                    commands += "ldc 1\n";
+                else
+                    commands += "ldc -1\n";
+                commands += "iadd\n";
+                commands += "invokespecial java/lang/Integer/<init>(I)V\n";
+                commands += "astore" + underlineOrSpace(slot) + slot + "\n";
+
+                commands += "iload" + underlineOrSpace(tempSlot) + tempSlot + "\n";
+
+                this.tempVarNumber--;
             }
             else if(unaryExpression.getOperand() instanceof ListAccessByIndex) {
-                //todo
+                ListAccessByIndex unaryListAccess = (ListAccessByIndex) unaryExpression.getOperand();
+
+                this.tempVarNumber++;
+                int tempSlotInstance = slotOf("");
+                this.tempVarNumber++;
+                int tempSlotIndex = slotOf("");
+                this.tempVarNumber++;
+                int tempSlotResult = slotOf("");
+
+                commands += unaryListAccess.getInstance().accept(this);
+                commands += "astore" + underlineOrSpace(tempSlotInstance) + tempSlotInstance + "\n";
+                commands += unaryListAccess.getIndex().accept(this);
+                commands += "invokevirtual java/lang/Integer/intValue()I\n";
+                commands += "istore" + underlineOrSpace(tempSlotIndex) + tempSlotIndex + "\n";
+
+                commands += "aload" + underlineOrSpace(tempSlotInstance) + tempSlotInstance + "\n";
+                commands += "iload" + underlineOrSpace(tempSlotIndex) + tempSlotIndex + "\n";
+                commands += "invokevirtual List/getElement(I)Ljava/lang/Object;\n";
+                commands += "checkcast java/lang/Integer\n";
+                commands += "invokevirtual java/lang/Integer/intValue()I\n";
+                commands += "istore" + underlineOrSpace(tempSlotResult) + tempSlotResult + "\n";
+
+                commands += "aload" + underlineOrSpace(tempSlotInstance) + tempSlotInstance + "\n";
+                commands += "iload" + underlineOrSpace(tempSlotIndex) + tempSlotIndex + "\n";
+                commands += "new java/lang/Integer\n";
+                commands += "dup\n";
+                commands += "iload" + underlineOrSpace(tempSlotResult) + tempSlotResult + "\n";
+                if (operator == UnaryOperator.postinc)
+                    commands += "ldc 1\n";
+                else
+                    commands += "ldc -1\n";
+                commands += "iadd\n";
+                commands += "invokespecial java/lang/Integer/<init>(I)V\n";
+                commands += "invokevirtual List/setElement(ILjava/lang/Object;)V\n";
+
+                commands += "iload" + underlineOrSpace(tempSlotResult) + tempSlotResult + "\n";
+
+                this.tempVarNumber -= 3;
             }
             else if(unaryExpression.getOperand() instanceof ObjectOrListMemberAccess) {
                 Expression instance = ((ObjectOrListMemberAccess) unaryExpression.getOperand()).getInstance();
@@ -936,10 +1110,79 @@ public class CodeGenerator extends Visitor<String> {
                 String memberName = ((ObjectOrListMemberAccess) unaryExpression.getOperand()).getMemberName().getName();
                 Type instanceType = instance.accept(expressionTypeChecker);
                 if(instanceType instanceof ListType) {
-                    //todo
+                    ListType instanceListType = (ListType) instanceType;
+                    int memberIndex;
+                    for (memberIndex = 0; memberIndex < instanceListType.getElementsTypes().size(); memberIndex++) {
+                        if (instanceListType.getElementsTypes().get(memberIndex).getName().getName().equals(memberName))
+                            break;
+                    }
+
+                    ListAccessByIndex unaryListAccess = (ListAccessByIndex) unaryExpression.getOperand();
+
+                    this.tempVarNumber++;
+                    int tempSlotInstance = slotOf("");
+                    this.tempVarNumber++;
+                    int tempSlotResult = slotOf("");
+
+                    commands += unaryListAccess.getInstance().accept(this);
+                    commands += "astore" + underlineOrSpace(tempSlotInstance) + tempSlotInstance + "\n";
+
+                    commands += "aload" + underlineOrSpace(tempSlotInstance) + tempSlotInstance + "\n";
+                    commands += "ldc " + memberIndex + "\n";
+                    commands += "invokevirtual List/getElement(I)Ljava/lang/Object;\n";
+                    commands += "checkcast java/lang/Integer\n";
+                    commands += "invokevirtual java/lang/Integer/intValue()I\n";
+                    commands += "istore" + underlineOrSpace(tempSlotResult) + tempSlotResult + "\n";
+
+                    commands += "aload" + underlineOrSpace(tempSlotInstance) + tempSlotInstance + "\n";
+                    commands += "ldc " + memberIndex + "\n";
+                    commands += "new java/lang/Integer\n";
+                    commands += "dup\n";
+                    commands += "iload" + underlineOrSpace(tempSlotResult) + tempSlotResult + "\n";
+                    if (operator == UnaryOperator.postinc)
+                        commands += "ldc 1\n";
+                    else
+                        commands += "ldc -1\n";
+                    commands += "iadd\n";
+                    commands += "invokespecial java/lang/Integer/<init>(I)V\n";
+                    commands += "invokevirtual List/setElement(ILjava/lang/Object;)V\n";
+
+                    commands += "iload" + underlineOrSpace(tempSlotResult) + tempSlotResult + "\n";
+
+                    this.tempVarNumber -= 2;
                 }
                 else if(instanceType instanceof ClassType) {
                     //todo
+                    ClassType classType = (ClassType) instanceType;
+
+                    this.tempVarNumber++;
+                    int tempSlotInstance = slotOf("");
+                    this.tempVarNumber++;
+                    int tempSlotResult = slotOf("");
+
+                    commands += instance.accept(this);
+                    commands += "astore" + underlineOrSpace(tempSlotInstance) + tempSlotInstance;
+
+                    commands += "aload" + underlineOrSpace(tempSlotInstance) + tempSlotInstance + "\n";
+                    commands += "getfield " + classType.getClassName().getName() + "/" + memberName + " " + makeTypeSignature(memberType) + "\n";
+                    commands += "invokevirtual java/lang/Integer/intValue()I\n";
+                    commands += "istore" + underlineOrSpace(tempSlotResult) + tempSlotResult + "\n";
+
+                    commands += "aload" + underlineOrSpace(tempSlotInstance) + tempSlotInstance + "\n";
+                    commands += "new java/lang/Integer\n";
+                    commands += "dup\n";
+                    commands += "iload" + underlineOrSpace(tempSlotResult) + tempSlotResult + "\n";
+                    if (operator == UnaryOperator.postinc)
+                        commands += "ldc 1\n";
+                    else
+                        commands += "ldc -1\n";
+                    commands += "iadd\n";
+                    commands += "invokespecial java/lang/Integer/<init>(I)V\n";
+                    commands += "putfield " + classType.getClassName().getName() + "/" + memberName + " " + makeTypeSignature(memberType) + "\n";
+
+                    commands += "iload" + underlineOrSpace(tempSlotResult) + tempSlotResult + "\n";
+
+                    this.tempVarNumber -= 2;
                 }
             }
         }
