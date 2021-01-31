@@ -152,7 +152,7 @@ public class CodeGenerator extends Visitor<String> {
     }
 
     private String getNewLabel(){
-        String newLabel = "Label" + labelCounter;
+        String newLabel = "Label_" + labelCounter;
         labelCounter += 1;
         return newLabel;
     }
@@ -1407,7 +1407,7 @@ public class CodeGenerator extends Visitor<String> {
     @Override
     public String visit(ThisClass thisClass) {
         String commands = "";
-        commands += "aload_0";
+        commands += "aload_0" + "\n";
         return commands;
     }
 
