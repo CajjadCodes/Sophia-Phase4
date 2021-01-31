@@ -1422,7 +1422,7 @@ public class CodeGenerator extends Visitor<String> {
                 for (VarDeclaration argDec : classDeclaration.getConstructor().getArgs())
                     classConstructorArgTypes.add(argDec.getType());
             }
-            commands += "invokespecial " + newClassInstance.getClassType().getClassName()
+            commands += "invokespecial " + newClassInstance.getClassType().getClassName().getName()
                     + "/<init>(" + makeFuncArgsSignature(classConstructorArgTypes) + ")V\n";
         } catch (ItemNotFoundException ignored) {}
         return commands;
