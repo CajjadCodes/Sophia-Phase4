@@ -168,39 +168,37 @@ public class CodeGenerator extends Visitor<String> {
         if (exp instanceof UnaryExpression) {
             UnaryExpression unExp = (UnaryExpression) exp;
             if (unExp.getOperator() == UnaryOperator.not){
-                branch(exp, nFalse, nTrue);
-                return;
+                branch(unExp.getOperand(), nFalse, nTrue);
             }
         }
-        if (exp instanceof BinaryExpression) {
+        else if (exp instanceof BinaryExpression) {
             BinaryExpression binExp = (BinaryExpression) exp;
             if (binExp.getBinaryOperator() == BinaryOperator.and) {
                 String nNext = getNewLabel();
                 branch(binExp.getFirstOperand(), nNext, nFalse);
                 addCommand(nNext + ":");
                 branch(binExp.getSecondOperand(), nTrue, nFalse);
-                return;
             }
             else if (binExp.getBinaryOperator() == BinaryOperator.or) {
                 String nNext = getNewLabel();
                 branch(binExp.getFirstOperand(), nTrue, nNext);
                 addCommand(nNext + ":");
                 branch(binExp.getSecondOperand(), nTrue, nFalse);
-                return;
+            }
+            else {
+                String expCommand = exp.accept(this);
+                addCommand(expCommand);
+                addCommand("ifeq " + nFalse);
+                addCommand("goto " + nTrue);
             }
         }
-        if (exp instanceof BoolValue) {
+        else if (exp instanceof BoolValue) {
             BoolValue boolValue = (BoolValue) exp;
             if (boolValue.getConstant())
                 addCommand("goto " + nTrue);
             else
                 addCommand("goto " + nFalse);
-            return;
         }
-        String expCommand = exp.accept(this);
-        addCommand(expCommand);
-        addCommand("ifeq " + nFalse);
-        addCommand("goto " + nTrue);
     }
 
     private String makeTypeSignature(Type t) {
