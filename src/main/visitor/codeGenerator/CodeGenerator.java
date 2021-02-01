@@ -238,7 +238,7 @@ public class CodeGenerator extends Visitor<String> {
         else if (fieldType instanceof BoolType) {
             addCommand("new java/lang/Boolean");
             addCommand("dup");
-            addCommand("ldc false");
+            addCommand("ldc 0");
             addCommand("invokespecial java/lang/Boolean/<init>(Z)V");
         }
         else if (fieldType instanceof StringType) {
@@ -412,7 +412,7 @@ public class CodeGenerator extends Visitor<String> {
         }
 
         for (VarDeclaration varDeclaration: methodDeclaration.getArgs()) {
-            this.currentSlots.add(varDeclaration.getVarName().getName());
+            varDeclaration.accept(this);
         }
 
         for (VarDeclaration varDeclaration : methodDeclaration.getLocalVars()) {
@@ -1059,7 +1059,7 @@ public class CodeGenerator extends Visitor<String> {
                     int tempSlotResult = slotOf("");
 
                     commands += instance.accept(this);
-                    commands += "astore" + underlineOrSpace(tempSlotInstance) + tempSlotInstance;
+                    commands += "astore" + underlineOrSpace(tempSlotInstance) + tempSlotInstance + "\n";
 
                     commands += "aload" + underlineOrSpace(tempSlotInstance) + tempSlotInstance + "\n";
                     commands += "getfield " + classType.getClassName().getName() + "/" + memberName + " " + makeTypeSignature(memberType) + "\n";
@@ -1205,7 +1205,7 @@ public class CodeGenerator extends Visitor<String> {
                     int tempSlotResult = slotOf("");
 
                     commands += instance.accept(this);
-                    commands += "astore" + underlineOrSpace(tempSlotInstance) + tempSlotInstance;
+                    commands += "astore" + underlineOrSpace(tempSlotInstance) + tempSlotInstance + "\n";
 
                     commands += "aload" + underlineOrSpace(tempSlotInstance) + tempSlotInstance + "\n";
                     commands += "getfield " + classType.getClassName().getName() + "/" + memberName + " " + makeTypeSignature(memberType) + "\n";
@@ -1282,6 +1282,12 @@ public class CodeGenerator extends Visitor<String> {
             }
             else if (elementType instanceof StringType) {
                 commands += "checkcast java/lang/String\n";
+            }
+            else if (elementType instanceof ListType) {
+                commands += "checkcast List\n";
+            }
+            else if (elementType instanceof FptrType) {
+                commands += "checkcast Fptr\n";
             }
         }
         return commands;
