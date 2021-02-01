@@ -215,6 +215,8 @@ public class CodeGenerator extends Visitor<String> {
             signature += "LFptr;";
         else if (t instanceof ClassType)
             signature += "L" + ((ClassType) t).getClassName().getName() + ";";
+        else if (t instanceof NullType)
+            signature += "V";
         return signature;
     }
 
@@ -240,10 +242,7 @@ public class CodeGenerator extends Visitor<String> {
             addCommand("invokespecial java/lang/Boolean/<init>(Z)V");
         }
         else if (fieldType instanceof StringType) {
-            addCommand("new java/lang/String");
-            addCommand("dup");
             addCommand("ldc \"\"");
-            addCommand("invokespecial java/lang/String/<init>(Ljava/lang/String;)V");
         }
         else if (fieldType instanceof ListType) {
             ListType listType = (ListType) fieldType;
@@ -256,7 +255,8 @@ public class CodeGenerator extends Visitor<String> {
             for (ListNameType listNameType : listType.getElementsTypes()) {
                 addCommand("dup");
                 initializeType(listNameType.getType());
-                addCommand("invokevirtual java/util/ArrayList/add(Ljava/lang/Object;)V");
+                addCommand("invokevirtual java/util/ArrayList/add(Ljava/lang/Object;)Z");
+                addCommand("pop");
             }
 
             addCommand("invokespecial List/<init>(Ljava/util/ArrayList;)V");
@@ -570,36 +570,50 @@ public class CodeGenerator extends Visitor<String> {
         String nBody = getNewLabel();
         String nUpdate = getNewLabel();
 
+        int listSize = ((ListType)foreachStmt.getList().accept(this.expressionTypeChecker)).getElementsTypes().size();
+
+        int foreachVarSlot = slotOf(foreachStmt.getVariable().getName());
+        String varSignature = "";
+        varSignature += makeTypeSignature(((ListType)foreachStmt.getList().accept(this.expressionTypeChecker))
+                .getElementsTypes().get(0).getType());
+        varSignature = varSignature.substring(1, varSignature.length() - 1);
+
         this.tempVarNumber++;
-        int tempSlot = slotOf("");
+        int indexTempSlot = slotOf("");
+
 
         /*init*/
         addCommand(nInit + ":");
         addCommand("ldc 0") ;
-        addCommand("istore" + underlineOrSpace(tempSlot) + tempSlot);
+        addCommand("istore" + underlineOrSpace(indexTempSlot) + indexTempSlot);
 
         /*condition check*/
         addCommand(nCond + ":");
-        addCommand("iload" + underlineOrSpace(tempSlot) + tempSlot);
-        addCommand(foreachStmt.getList().accept(this));
-        addCommand("invokevirtual java/util/ArrayList/size()I");
+        addCommand("iload" + underlineOrSpace(indexTempSlot) + indexTempSlot);
+        addCommand("ldc " + listSize);
         addCommand("if_icmpge " + nAfter);
 
         /*body*/
         addCommand(nBody + ":");
+        addCommand(foreachStmt.getList().accept(this));
+        addCommand("iload" + underlineOrSpace(indexTempSlot) + indexTempSlot);
+        addCommand("invokevirtual List/getElement(I)Ljava/lang/Object;");
+        addCommand("checkcast " + varSignature);
+        addCommand("astore" + underlineOrSpace(foreachVarSlot) + foreachVarSlot);
         pushLabels(nUpdate, nAfter, nUpdate);
         foreachStmt.getBody().accept(this);
         popLabels();
 
         /*update*/
         addCommand(nUpdate + ":");
-        addCommand("iload" + underlineOrSpace(tempSlot) + tempSlot);
+        addCommand("iload" + underlineOrSpace(indexTempSlot) + indexTempSlot);
         addCommand("iconst_1");
         addCommand("iadd");
-        addCommand("istore" + underlineOrSpace(tempSlot) + tempSlot);
+        addCommand("istore" + underlineOrSpace(indexTempSlot) + indexTempSlot);
         addCommand("goto " + nCond);
 
         this.tempVarNumber--;
+        this.currentSlots.remove(this.currentSlots.size() - 1);
 
         return null;
     }
@@ -719,7 +733,7 @@ public class CodeGenerator extends Visitor<String> {
             if(firstType instanceof ListType) {
                 // make new list with List copy constructor with the second operand commands
                 // (add these commands to secondOperandCommands)
-                secondOperandCommands += "invokespecial List/<init>(LList;)V\n"; //not sure
+                secondOperandCommands = "new List\n" + "dup\n" + secondOperandCommands + "invokespecial List/<init>(LList;)V\n";
             }
             if(binaryExpression.getFirstOperand() instanceof Identifier) {
                 Type secondType = binaryExpression.getSecondOperand().accept(this.expressionTypeChecker);
@@ -1443,24 +1457,25 @@ public class CodeGenerator extends Visitor<String> {
         commands += "dup\n";
         commands += "invokespecial java/util/ArrayList/<init>()V\n";
 
-        for (Expression expr : listValue.getElements()) {
+        for (Expression element : listValue.getElements()) {
+//            commands += "HHHHHHHHAAAAAAA\n";
             commands += "dup\n";
 
-            Type exprType = expr.accept(expressionTypeChecker);
+            Type exprType = element.accept(expressionTypeChecker);
             if (exprType instanceof IntType) {
                 commands += "new java/lang/Integer\n";
                 commands += "dup\n";
-                commands += expr.accept(this);
+                commands += element.accept(this);
                 commands += "invokespecial java/lang/Integer/<init>(I)V\n";
             }
             else if (exprType instanceof BoolType) {
                 commands += "new java/lang/Boolean\n";
                 commands += "dup\n";
-                commands += expr.accept(this);
+                commands += element.accept(this);
                 commands += "invokespecial java/lang/Boolean/<init>(Z)V\n";
             }
             else {
-                commands += expr.accept(this);
+                commands += element.accept(this);
             }
             commands += "invokevirtual java/util/ArrayList/add(Ljava/lang/Object;)Z\n";
             commands += "pop\n";
