@@ -298,7 +298,6 @@ public class CodeGenerator extends Visitor<String> {
 
         addCommand("return");
         addCommand(".end method");
-        addBlankLine();
     }
 
     private void addStaticMainMethod() {
@@ -346,7 +345,8 @@ public class CodeGenerator extends Visitor<String> {
         for (FieldDeclaration fieldDeclaration : classDeclaration.getFields()) {
             fieldDeclaration.accept(this);
         }
-        addBlankLine();
+        if (classDeclaration.getFields().size() != 0)
+            addBlankLine();
 
         if (classDeclaration.getConstructor() != null)
             classDeclaration.getConstructor().accept(this);
@@ -363,9 +363,12 @@ public class CodeGenerator extends Visitor<String> {
 
     @Override
     public String visit(ConstructorDeclaration constructorDeclaration) {
-        if (constructorDeclaration.getArgs().size() != 0)
+        if (constructorDeclaration.getArgs().size() != 0) {
             addDefaultConstructor();
+            addBlankLine();
+        }
         this.visit((MethodDeclaration) constructorDeclaration);
+        addBlankLine();
         if (constructorDeclaration.getMethodName().getName().equals("Main")) {
             addStaticMainMethod();
         }
@@ -430,7 +433,6 @@ public class CodeGenerator extends Visitor<String> {
             addCommand("return");
         }
         addCommand(".end method");
-        addBlankLine();
         return null;
     }
 
@@ -495,7 +497,9 @@ public class CodeGenerator extends Visitor<String> {
         expressionTypeChecker.setIsInMethodCallStmt(true);
         addCommand(methodCallStmt.getMethodCall().accept(this));
         expressionTypeChecker.setIsInMethodCallStmt(false);
-        addCommand("pop");
+        FptrType fptrType = (FptrType) methodCallStmt.getMethodCall().getInstance().accept(this.expressionTypeChecker);
+        if (!(fptrType.getReturnType() instanceof NullType))
+            addCommand("pop");
         addCommand("goto " + getTopAfterLabel()); //necessary?
         return null;
     }
@@ -629,7 +633,9 @@ public class CodeGenerator extends Visitor<String> {
 
         addCommand(nInit + ":");
         if (forStmt.getInitialize() != null) {
+            pushLabels(nCond, nAfter, nCond);
             forStmt.getInitialize().accept(this);
+            popLabels();
         }
 
         addCommand(nCond + ":");
@@ -646,7 +652,9 @@ public class CodeGenerator extends Visitor<String> {
 
         addCommand(nUpdate + ":");
         if (forStmt.getUpdate() != null) {
+            pushLabels(nCond, nAfter, nCond);
             forStmt.getUpdate().accept(this);
+            popLabels();
         }
 
         return null;
@@ -692,11 +700,11 @@ public class CodeGenerator extends Visitor<String> {
                 commands += "if_icmpgt " + nTrue +"\n";
             else
                 commands += "if_icmplt " + nTrue +"\n";
-            commands += nTrue + ":\n";
-            commands += "ldc 1\n";
-            commands += "goto " + nAfter + "\n";
             commands += nFalse + ":\n";
             commands += "ldc 0\n";
+            commands += "goto " + nAfter + "\n";
+            commands += nTrue + ":\n";
+            commands += "ldc 1\n";
             commands += nAfter + ":\n";
         }
         else if((operator == BinaryOperator.eq) || (operator == BinaryOperator.neq)) {
@@ -710,11 +718,11 @@ public class CodeGenerator extends Visitor<String> {
                 commands += "if_icmpeq " + nTrue +"\n";
             else
                 commands += "if_icmpne " + nTrue +"\n";
-            commands += nTrue + ":\n";
-            commands += "ldc 1\n";
-            commands += "goto " + nAfter + "\n";
             commands += nFalse + ":\n";
             commands += "ldc 0\n";
+            commands += "goto " + nAfter + "\n";
+            commands += nTrue + ":\n";
+            commands += "ldc 1\n";
             commands += nAfter + ":\n";
         }
         else if(operator == BinaryOperator.and) {
@@ -1312,12 +1320,7 @@ public class CodeGenerator extends Visitor<String> {
     public String visit(ListAccessByIndex listAccessByIndex) {
         String commands = "";
         commands += listAccessByIndex.getInstance().accept(this);
-
-        commands += "new java/lang/Integer\n";
-        commands += "dup\n";
         commands += listAccessByIndex.getIndex().accept(this);
-        commands += "invokespecial java/lang/Integer/<init>(I)V\n";
-
         commands += "invokevirtual List/getElement(I)Ljava/lang/Object;\n";
 
         ListType instanceType = (ListType) listAccessByIndex.getInstance().accept(expressionTypeChecker);
@@ -1340,8 +1343,11 @@ public class CodeGenerator extends Visitor<String> {
             commands += "checkcast java/lang/Integer\n";
             commands += "invokevirtual java/lang/Integer/intValue()I\n";
         }
-        else if (elementType instanceof StringType) {
-            commands += "checkcast java/lang/String\n";
+        else if (elementType instanceof ListType) {
+            commands += "checkcast List\n";
+        }
+        else if (elementType instanceof FptrType) {
+            commands += "checkcast Fptr\n";
         }
 
         return commands;
@@ -1458,7 +1464,6 @@ public class CodeGenerator extends Visitor<String> {
         commands += "invokespecial java/util/ArrayList/<init>()V\n";
 
         for (Expression element : listValue.getElements()) {
-//            commands += "HHHHHHHHAAAAAAA\n";
             commands += "dup\n";
 
             Type exprType = element.accept(expressionTypeChecker);
