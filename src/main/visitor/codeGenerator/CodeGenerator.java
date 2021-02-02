@@ -651,9 +651,6 @@ public class CodeGenerator extends Visitor<String> {
         addCommand("goto " + nCond);
 
         this.tempVarNumber--;
-        this.currentSlots.remove(this.currentSlots.size() - 1);
-
-        addCommand("goto " + getTopAfterLabel());
 
         return null;
     }
@@ -692,8 +689,6 @@ public class CodeGenerator extends Visitor<String> {
             forStmt.getUpdate().accept(this);
             popLabels();
         }
-
-        addCommand("goto " + getTopAfterLabel());
 
         return null;
     }
@@ -810,8 +805,6 @@ public class CodeGenerator extends Visitor<String> {
             Type firstType = binaryExpression.getFirstOperand().accept(expressionTypeChecker);
             String secondOperandCommands = binaryExpression.getSecondOperand().accept(this);
             if(firstType instanceof ListType) {
-                // make new list with List copy constructor with the second operand commands
-                // (add these commands to secondOperandCommands)
                 secondOperandCommands = "new List\n" + "dup\n" + secondOperandCommands + "invokespecial List/<init>(LList;)V\n";
             }
             if(binaryExpression.getFirstOperand() instanceof Identifier) {
@@ -1046,7 +1039,6 @@ public class CodeGenerator extends Visitor<String> {
                 commands += unaryListAccess.getInstance().accept(this);
                 commands += "astore" + underlineOrSpace(tempSlotInstance) + tempSlotInstance + "\n";
                 commands += unaryListAccess.getIndex().accept(this);
-                commands += "invokevirtual java/lang/Integer/intValue()I\n";
                 commands += "istore" + underlineOrSpace(tempSlotIndex) + tempSlotIndex + "\n";
 
                 commands += "aload" + underlineOrSpace(tempSlotInstance) + tempSlotInstance + "\n";
@@ -1193,7 +1185,6 @@ public class CodeGenerator extends Visitor<String> {
                 commands += unaryListAccess.getInstance().accept(this);
                 commands += "astore" + underlineOrSpace(tempSlotInstance) + tempSlotInstance + "\n";
                 commands += unaryListAccess.getIndex().accept(this);
-                commands += "invokevirtual java/lang/Integer/intValue()I\n";
                 commands += "istore" + underlineOrSpace(tempSlotIndex) + tempSlotIndex + "\n";
 
                 commands += "aload" + underlineOrSpace(tempSlotInstance) + tempSlotInstance + "\n";
@@ -1373,6 +1364,7 @@ public class CodeGenerator extends Visitor<String> {
     @Override
     public String visit(Identifier identifier) {
         String commands = "";
+
         int slot = slotOf(identifier.getName());
 
         try {
@@ -1488,7 +1480,7 @@ public class CodeGenerator extends Visitor<String> {
             commands += "checkcast java/lang/String\n";
         }
         else if (instanceType.getReturnType() instanceof NullType) {
-            commands += "pop\n"; //is it correct for null?
+            commands += "pop\n";
         }
 
         return commands;
