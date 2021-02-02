@@ -39,9 +39,7 @@ import main.visitor.Visitor;
 import main.visitor.typeChecker.ExpressionTypeChecker;
 
 import java.io.*;
-import java.lang.annotation.ElementType;
 import java.util.ArrayList;
-import java.util.List;
 
 public class CodeGenerator extends Visitor<String> {
     ExpressionTypeChecker expressionTypeChecker;
@@ -52,9 +50,9 @@ public class CodeGenerator extends Visitor<String> {
     private MethodDeclaration currentMethod;
 
     private int labelCounter;
-    private ArrayList<ArrayList<String>> labelsStack;
+    private final ArrayList<ArrayList<String>> labelsStack;
 
-    private ArrayList<String> currentSlots;
+    private final ArrayList<String> currentSlots;
     private int tempVarNumber;
 
     public CodeGenerator(Graph<String> classHierarchy) {
@@ -546,13 +544,13 @@ public class CodeGenerator extends Visitor<String> {
 
         String signature = "";
         if (argType instanceof IntType) {
-            signature = "I";
+            signature += "I";
         }
         else if (argType instanceof BoolType) {
-            signature = "Z";
+            signature += "Z";
         }
         else {
-            signature = makeTypeSignature(argType);
+            signature += makeTypeSignature(argType);
         }
 
         addCommand("invokevirtual java/io/PrintStream/print(" + signature + ")V");
